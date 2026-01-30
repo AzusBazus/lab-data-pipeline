@@ -1,25 +1,29 @@
+# Python artifacts
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-
 env/
 .env
 venv/
 .venv/
 
+# IDE settings
 .vscode/
 .idea/
 
+# Database
 *.db
 *.sqlite
 *.sqlite3
 
+# Local Data Storage (Keep the folders, ignore the content)
 data/raw/*
 data/archive/*
 !data/raw/.gitkeep
 !data/archive/.gitkeep
 
+# Mac/Windows clutter
 .DS_Store
 Thumbs.db

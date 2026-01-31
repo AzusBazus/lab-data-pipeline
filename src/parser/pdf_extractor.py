@@ -1,12 +1,13 @@
 import re
 import pdfplumber
-from src.config import COLUMN_KEYWORDS
 from src.utils.text_matching import is_fuzzy_match
+from src.config import COLUMN_KEYWORDS, NOISE_PATTERNS
 
 class MedicalLabParser:
     def __init__(self, filepath):
         self.filepath = filepath
         self.filename = filepath.split("/")[-1] # For logging
+        self.metadata = {}
 
     def parse(self):
         """
@@ -29,6 +30,9 @@ class MedicalLabParser:
             for page_num, page in enumerate(pdf.pages):
                 # Get text lines for header detection
                 text_lines = page.extract_text_lines()
+
+                # Extract Metadata (Creation Date)
+                self._extract_metadata_from_noise(text_lines)
                 
                 # Get tables
                 tables = page.find_tables()
@@ -57,6 +61,22 @@ class MedicalLabParser:
 
         return patient_info, extracted_results
 
+    def _extract_metadata_from_noise(self, text_lines):
+        """
+        Scans page text for the 'Print page' timestamp to capture creation date.
+        Only needs to find it once per document.
+        """
+        # If we already found it, skip (assuming it's the same on every page)
+        if self.metadata.get('creation_date'): return
+
+        for line in text_lines:
+            text = line['text']
+            # Look for DD.MM.YYYY, HH:MM
+            match = re.search(r'(\d{2}\.\d{2}\.\d{4}),\s+(\d{2}:\d{2})', text)
+            if match:
+                self.metadata['creation_date'] = f"{match.group(1)} {match.group(2)}"
+                # Don't break loop, we just grab the first one we see
+
     def _extract_patient_info(self, page):
         """Simple keyword search on the first page for patient details"""
         text = page.extract_text()
@@ -76,20 +96,32 @@ class MedicalLabParser:
         return info
 
     def _find_header_above_table(self, table_bbox, text_lines):
-        """Finds text physically located just above the table."""
         table_top = table_bbox[1]
         
-        # Look for text in the 100px zone above the table
-        candidates = [
-            line for line in text_lines 
-            if line['bottom'] < table_top and (table_top - line['bottom']) < 100
-        ]
+        candidates = []
+        
+        for line in text_lines:
+            # 1. Spatial Check (Is it immediately above?)
+            is_above = line['bottom'] < table_top and (table_top - line['bottom']) < 100
+            if not is_above:
+                continue
+
+            text = line['text'].strip()
+            
+            # 2. Noise Check (Is it a printer artifact?)
+            if self._is_noise(text):
+                continue
+                
+            candidates.append(line)
         
         if not candidates:
             return None
             
-        # The closest text is the header
         return candidates[-1]['text'].strip()
+
+    def _is_noise(self, text):
+        """Returns True if text matches any of our known noise patterns."""
+        return any(pattern.search(text) for pattern in NOISE_PATTERNS)
 
     def _is_patient_table(self, data):
         """

@@ -39,6 +39,12 @@ NOISE_PATTERNS = [
     re.compile(r'^\s*\d+\s*/\s*\d+\s*$', re.IGNORECASE)
 ]
 
-# Ensure these verify on run
-print(f"Project Base: {BASE_DIR}")
-print(f"Reading PDFs from: {RAW_DATA_DIR}")
+PATIENT_FIELDS = {
+    "name": ["ф.и.о.", "фио", "patient", "name", "full name", "фамилия"],
+    "dob": ["дата рождения", "др", "dob", "date of birth", "birth date"],
+    "report_date": ["дата", "date", "date of report", "creation date"]
+}
+
+# Regex for finding dates with various separators (., -, /)
+# Captures: 30.01.2026, 30-01-2026, 30/01/2026
+DATE_PATTERN = re.compile(r'\b(\d{2})[./-](\d{2})[./-](\d{4})\b')

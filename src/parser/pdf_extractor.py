@@ -1,5 +1,6 @@
-import pdfplumber
 import re
+import pdfplumber
+from src.config import COLUMN_KEYWORDS
 from src.utils.text_matching import is_fuzzy_match
 
 class MedicalLabParser:
@@ -110,48 +111,77 @@ class MedicalLabParser:
                     return True
         return False
 
-    def _process_table_rows(self, data, context, page_num):
-        """Converts raw list-of-lists into nice dictionaries"""
-        results = []
-    
-        # 1. Identify the Header Row using Fuzzy Matching
-        header_idx = -1
-    
-        # List of possible names for the Result column
-        target_headers = ["результат", "result", "value", "значение"]
-    
+    def _find_header_row_index(self, data):
+        """Finds the row index that contains column headers."""
+        # We look for the "Result" column as the strongest anchor
+        target_headers = COLUMN_KEYWORDS['result']
+        
         for i, row in enumerate(data):
-            # Check every cell in this row
             for cell in row:
                 if not cell: continue
-            
-                # Check if ANY target header matches this cell
-                match_found = any(is_fuzzy_match(str(cell), t) for t in target_headers)
-            
-                if match_found:
-                    header_idx = i
-                    break
-            if header_idx != -1: break
-    
-        # Fallback: If fuzzy match failed, assume row 0
-        if header_idx == -1:
-            header_idx = 0
+                if any(is_fuzzy_match(str(cell), t) for t in target_headers):
+                    return i
+        return 0 # Fallback to first row
 
-        # Iterate rows AFTER the header
+    def _map_header_indices(self, header_row):
+        """
+        Analyzes a single header row and figures out which index is which.
+        Returns: dict { 'test_name': 0, 'result': 2, ... }
+        """
+        col_map = {}
+        
+        # Iterate over our known concepts (test_name, result, etc.)
+        for col_type, keywords in COLUMN_KEYWORDS.items():
+            
+            # Check every cell in the header row
+            for idx, cell in enumerate(header_row):
+                if not cell: continue
+                
+                # Check fuzzy match against ALL keywords for this concept
+                # We use a higher threshold (90) here because headers are usually clear
+                if any(is_fuzzy_match(str(cell), k, threshold=88) for k in keywords):
+                    col_map[col_type] = idx
+                    break # Stop looking for this column once found
+        
+        # FAILSAFE: If fuzzy matching failed completely (e.g. empty header), 
+        # revert to the "standard" structure you observed: [Name, Result, Norm, Unit]
+        if 'result' not in col_map:
+            # You can log a warning here if you want
+            print(f"⚠️ Warning: Could not auto-map columns. Using default structure.")
+            return {'test_name': 0, 'result': 1, 'norm': 2, 'unit': 3}
+            
+        return col_map
+
+    def _process_table_rows(self, data, context, page_num):
+        results = []
+        if not data: return results
+
+        # 1. Identify the Header Row
+        header_idx = self._find_header_row_index(data)
+        
+        # 2. Map Columns (The Upgrade)
+        # This returns something like: {'test_name': 0, 'result': 2, 'unit': 3}
+        header_row = data[header_idx]
+        col_map = self._map_header_indices(header_row)
+
+        # 3. Iterate rows AFTER the header
         for row in data[header_idx+1:]:
-            # Skip empty rows or single-column garbage
             if not row or len(row) < 2: continue
             
-            # Simple Mapping (You can improve this later based on column position)
-            # Assuming: [Test Name, Result, Norm, Unit] structure roughly
+            # Use the map to pluck values safely
             clean_row = {
                 "category": context,
-                "test_name": row[0], 
-                "value": row[1] if len(row) > 1 else None,
-                "norm": row[2] if len(row) > 2 else None,
-                "unit": row[3] if len(row) > 3 else None,
-                "page": page_num + 1
+                "page": page_num + 1,
+                
+                # Fetch using the mapped index, or None if that column wasn't found
+                "test_name": row[col_map['test_name']] if col_map.get('test_name') is not None and len(row) > col_map['test_name'] else None,
+                "value":     row[col_map['result']]    if col_map.get('result')    is not None and len(row) > col_map['result']    else None,
+                "norm":      row[col_map['norm']]      if col_map.get('norm')      is not None and len(row) > col_map['norm']      else None,
+                "unit":      row[col_map['unit']]      if col_map.get('unit')      is not None and len(row) > col_map['unit']      else None,
             }
-            results.append(clean_row)
+            
+            # Integrity Check: If we didn't find a Result or a Name, this row is likely garbage
+            if clean_row['test_name'] and clean_row['value']:
+                results.append(clean_row)
             
         return results

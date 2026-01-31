@@ -31,12 +31,8 @@ def main():
         print("-" * 20)
         
         # Print first 5 results to keep console clean, or all if you prefer
-        for i, res in enumerate(results):
-            if i < 5: 
-                print(f"   🔹 [{res['category']}] {res['test_name']}: {res['value']} (Unit: {res['unit']})")
-            else:
-                print(f"   ... and {len(results) - 5} more rows.")
-                break
+        for res in results:
+            print(f"   🔹 [{res['category']}] {res['test_name']}: {res['value']} (Unit: {res['unit']})")
         print("="*60 + "\n")
 
 if __name__ == "__main__":

@@ -10,5 +10,5 @@ SQLAlchemy==2.0.25
 # Environment Variables (Security)
 python-dotenv==1.0.0
 
-# Optional: For future Telegram integration
-# python-telegram-bot==20.7
+# Fuzzy Matching
+rapidfuzz==3.6.1

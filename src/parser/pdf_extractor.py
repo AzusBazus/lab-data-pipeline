@@ -1,5 +1,6 @@
 import pdfplumber
 import re
+from src.utils.text_matching import is_fuzzy_match
 
 class MedicalLabParser:
     def __init__(self, filepath):
@@ -90,24 +91,50 @@ class MedicalLabParser:
         return candidates[-1]['text'].strip()
 
     def _is_patient_table(self, data):
-        """Check if table contains patient keywords"""
-        flat_text = " ".join([str(x) for row in data for x in row]).lower()
-        return "ф.и.о." in flat_text
+        """
+        Robust check: Looks for 'Ф.И.О.' or 'Patient Name' anywhere in the table.
+        """
+        # Flatten the table into a set of unique strings to search faster
+        unique_words = set()
+        for row in data:
+            for cell in row:
+                if cell:
+                    unique_words.add(str(cell))
+    
+        # Check our known keywords
+        anchors = ["ф.и.о.", "фамилия", "patient", "name"]
+    
+        for word in unique_words:
+            for anchor in anchors:
+                if is_fuzzy_match(word, anchor, threshold=90):
+                    return True
+        return False
 
     def _process_table_rows(self, data, context, page_num):
         """Converts raw list-of-lists into nice dictionaries"""
         results = []
-        
-        # Heuristic: Find the header row (row with "Результат" or "Result")
+    
+        # 1. Identify the Header Row using Fuzzy Matching
         header_idx = -1
+    
+        # List of possible names for the Result column
+        target_headers = ["результат", "result", "value", "значение"]
+    
         for i, row in enumerate(data):
-            row_str = " ".join([str(x).lower() for x in row if x])
-            if "результат" in row_str or "result" in row_str:
-                header_idx = i
-                break
-        
+            # Check every cell in this row
+            for cell in row:
+                if not cell: continue
+            
+                # Check if ANY target header matches this cell
+                match_found = any(is_fuzzy_match(str(cell), t) for t in target_headers)
+            
+                if match_found:
+                    header_idx = i
+                    break
+            if header_idx != -1: break
+    
+        # Fallback: If fuzzy match failed, assume row 0
         if header_idx == -1:
-            # Fallback: Assume row 0 is header if we can't find one
             header_idx = 0
 
         # Iterate rows AFTER the header

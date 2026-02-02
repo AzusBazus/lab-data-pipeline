@@ -1,7 +1,7 @@
 import re
 import pdfplumber
 from src.utils.text_matching import is_fuzzy_match
-from src.parser.cleaner import expand_composite_rows
+from src.parser.cleaner import expand_composite_rows, infer_missing_units
 from src.config import COLUMN_KEYWORDS, NOISE_PATTERNS, PATIENT_FIELDS, DATE_PATTERN
 
 class MedicalLabParser:
@@ -336,6 +336,7 @@ class MedicalLabParser:
             if clean_row['test_name'] and clean_row['value']:
                 extracted_rows.append(clean_row)
                 
-        final_results = expand_composite_rows(extracted_rows)
+        expanded_rows = expand_composite_rows(extracted_rows)
+        final_results = infer_missing_units(expanded_rows)
 
         return final_results

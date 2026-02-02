@@ -60,7 +60,7 @@ def _split_and_suffix_row(row):
         
         # Suffix Generation
         # We look at the specific NORM for this specific sub-result to guess the unit
-        suffix = _infer_suffix_from_text(new_row['norm'])
+        suffix = _detect_unit_keyword(new_row['norm'])
         
         if suffix:
             new_row['test_name'] = f"{row['test_name']} ({suffix})"
@@ -72,18 +72,35 @@ def _split_and_suffix_row(row):
         
     return sub_rows
 
-def _infer_suffix_from_text(text):
+def infer_missing_units(rows):
+    """Stage 2: Fill in missing units based on Value or Norm context."""
+    for row in rows:
+        # If unit already exists, skip (or you could normalize it here too)
+        if row.get('unit'):
+            continue
+
+        # Strategy A: Check Value for clues (e.g., "5 min")
+        # (This is where you'd add regex for "5 min" later)
+        
+        # Strategy B: Check Norm for clues
+        norm_text = row.get('norm')
+        found_unit = _detect_unit_keyword(norm_text)
+        
+        if found_unit:
+            row['unit'] = found_unit
+
+    return rows
+
+def _detect_unit_keyword(text):
     """
-    Scans text against the config map to find a canonical unit suffix.
+    Shared Helper: Scans text against config to find a canonical unit.
+    Used by both Row Expansion (for renaming) and Unit Inference (for filling).
     """
     if not text: return None
     text_lower = text.lower()
     
-    # Iterate through our config map
-    # Key = "Seconds", Keywords = ["sec", "сек", ...]
-    for canonical_suffix, keywords in UNIT_SUFFIX_MAP.items():
+    for canonical_unit, keywords in UNIT_SUFFIX_MAP.items():
         for keyword in keywords:
             if keyword in text_lower:
-                return canonical_suffix
-                
+                return canonical_unit
     return None

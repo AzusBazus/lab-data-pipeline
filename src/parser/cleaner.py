@@ -1,4 +1,4 @@
-from src.config import UNIT_SUFFIX_MAP
+from src.config import UNIT_SUFFIX_MAP, TIME_PATTERNS
 
 def expand_composite_rows(raw_rows):
     """
@@ -104,3 +104,51 @@ def _detect_unit_keyword(text):
             if keyword in text_lower:
                 return canonical_unit
     return None
+
+def normalize_time_values(rows):
+    """
+    Stage 3: formatting "5 min 30 sec" strings into total seconds.
+    Also handles comma replacement for plain numbers (14,7 -> 14.7).
+    """
+    for row in rows:
+        val_str = str(row.get('value', '')).strip()
+        if not val_str: continue
+
+        # 1. Check for Time Patterns (Min/Sec strings)
+        # We calculate total seconds: (Hours * 3600) + (Minutes * 60) + Seconds
+        total_seconds = 0
+        match_found = False
+
+        # Check Hours
+        h_match = TIME_PATTERNS['hours'].search(val_str)
+        if h_match:
+            total_seconds += float(h_match.group(1).replace(',', '.')) * 3600
+            match_found = True
+
+        # Check Minutes
+        m_match = TIME_PATTERNS['minutes'].search(val_str)
+        if m_match:
+            total_seconds += float(m_match.group(1).replace(',', '.')) * 60
+            match_found = True
+
+        # Check Seconds
+        s_match = TIME_PATTERNS['seconds'].search(val_str)
+        if s_match:
+            total_seconds += float(s_match.group(1).replace(',', '.'))
+            match_found = True
+
+        # If we found time data, update the row
+        if match_found:
+            row['value'] = round(total_seconds, 2) # Clean float
+            row['unit'] = "Seconds" # Standardized unit
+            continue # Skip to next row
+
+        # 2. General Number Cleaning (if not a time string)
+        # Fix "14,7" -> 14.7 for SQL compatibility
+        if ',' in val_str and val_str.replace(',', '').replace('.', '').isdigit():
+             try:
+                 row['value'] = float(val_str.replace(',', '.'))
+             except ValueError:
+                 pass # Keep original string if conversion fails
+
+    return rows

@@ -55,6 +55,15 @@ UNIT_SUFFIX_MAP = {
     "Count": ["count", "количество", "number", "10^9"]
 }
 
+# Regex to capture numeric values attached to time units
+# Captures: "4", "4.5", "04"
+# Keywords: мин, min, м, m (Minutes) | сек, sec, с, s (Seconds)
+TIME_PATTERNS = {
+    "minutes": re.compile(r'(\d+(?:[.,]\d+)?)\s*(?:мин|min|м\b|m\b)', re.IGNORECASE),
+    "seconds": re.compile(r'(\d+(?:[.,]\d+)?)\s*(?:сек|sec|с\b|s\b)', re.IGNORECASE),
+    "hours":   re.compile(r'(\d+(?:[.,]\d+)?)\s*(?:час|hour|ч\b|h\b)', re.IGNORECASE)
+}
+
 # Regex for finding dates with various separators (., -, /)
 # Captures: 30.01.2026, 30-01-2026, 30/01/2026
 DATE_PATTERN = re.compile(r'\b(\d{2})[./-](\d{2})[./-](\d{4})\b')

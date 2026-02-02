@@ -12,7 +12,8 @@ ARCHIVE_DIR = os.path.join(BASE_DIR, 'data', 'archive')
 COLUMN_KEYWORDS = {
     "test_name": [
         "наименование", "тест", "parameter", "test", "name", 
-        "исследование", "показатель", "analysis"
+        "исследование", "показатель", "analysis", "параметры",
+        "анализ", 
     ],
     "result": [
         "результат", "result", "value", "значение", 
@@ -43,6 +44,15 @@ PATIENT_FIELDS = {
     "name": ["ф.и.о.", "фио", "patient", "name", "full name", "фамилия"],
     "dob": ["дата рождения", "др", "dob", "date of birth", "birth date"],
     "report_date": ["дата", "date", "date of report", "creation date"]
+}
+
+UNIT_SUFFIX_MAP = {
+    "Seconds": ["sec", "сек", "с.", "seconds", "секунды"],
+    "Percentage": ["%", "процент", "percent"],
+    "INR": ["inr", "мно", "international normalized ratio"],
+    "Ratio": ["ratio", "коэф", "отношение", "index"],
+    "G/L": ["g/l", "г/л", "gram/liter"],
+    "Count": ["count", "количество", "number", "10^9"]
 }
 
 # Regex for finding dates with various separators (., -, /)

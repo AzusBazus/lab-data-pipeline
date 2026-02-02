@@ -30,7 +30,6 @@ def main():
         print(f"👤 Patient: {patient}")
         print("-" * 20)
         
-        # Print first 5 results to keep console clean, or all if you prefer
         for res in results:
             print(f"   🔹 [{res['category']}] {res['test_name']}: Value: {res['value']}, Norm: {res['norm']}, Unit: {res['unit']}")
         print("="*60 + "\n")

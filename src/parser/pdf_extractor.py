@@ -1,6 +1,7 @@
 import re
 import pdfplumber
 from src.utils.text_matching import is_fuzzy_match
+from src.parser.cleaner import expand_composite_rows
 from src.config import COLUMN_KEYWORDS, NOISE_PATTERNS, PATIENT_FIELDS, DATE_PATTERN
 
 class MedicalLabParser:
@@ -39,17 +40,19 @@ class MedicalLabParser:
                 # Sort top-to-bottom
                 tables.sort(key=lambda t: t.bbox[1])
 
-                for table in tables:
+                for i, table in enumerate(tables):
                     # A. Find the Label (The "Y-Axis Truth")
                     label = self._find_header_above_table(table.bbox, text_lines)
                     
+                    # If no label found, we implicitly keep the old current_context
                     if label:
                         current_context = label
-                    # If no label found, we implicitly keep the old current_context
                     
                     # B. Extract Data
                     data = table.extract()
-                    if not data: continue
+
+                    if not data:
+                        continue
 
                     # C. Clean and Append Data
                     # Skip if it's the patient info table (contains "Ф.И.О.")
@@ -302,7 +305,7 @@ class MedicalLabParser:
         return col_map
 
     def _process_table_rows(self, data, context, page_num):
-        results = []
+        extracted_rows = []
         if not data: return results
 
         # 1. Identify the Header Row
@@ -331,6 +334,8 @@ class MedicalLabParser:
             
             # Integrity Check: If we didn't find a Result or a Name, this row is likely garbage
             if clean_row['test_name'] and clean_row['value']:
-                results.append(clean_row)
-            
-        return results
+                extracted_rows.append(clean_row)
+                
+        final_results = expand_composite_rows(extracted_rows)
+
+        return final_results

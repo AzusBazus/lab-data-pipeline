@@ -31,7 +31,7 @@ def main():
         print("-" * 20)
         
         for res in results:
-            print(f"   🔹 [{res['category']}] {res['test_name']}: Value: {res['value']}, Norm: {res['norm']}, Unit: {res['unit']}")
+            print(f"   🔹 [Category:{res['category']}]\n Test Name: {res['test_name']}\n Value: {res['value']}\n Text Value: {res['text_value']}\n Norm: {res['norm']}\n Unit: {res['unit']}\n")
         print("="*60 + "\n")
 
 if __name__ == "__main__":

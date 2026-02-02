@@ -1,7 +1,7 @@
 import re
 import pdfplumber
 from src.utils.text_matching import is_fuzzy_match
-from src.parser.cleaner import expand_composite_rows, infer_missing_units, normalize_time_values
+from src.parser.cleaner import expand_composite_rows, infer_missing_units, normalize_result_values
 from src.config import COLUMN_KEYWORDS, NOISE_PATTERNS, PATIENT_FIELDS, DATE_PATTERN
 
 class MedicalLabParser:
@@ -328,6 +328,7 @@ class MedicalLabParser:
                 # Fetch using the mapped index, or None if that column wasn't found
                 "test_name": row[col_map['test_name']] if col_map.get('test_name') is not None and len(row) > col_map['test_name'] else None,
                 "value":     row[col_map['result']]    if col_map.get('result')    is not None and len(row) > col_map['result']    else None,
+                "text_value":row[col_map['result']]    if col_map.get('result')    is not None and len(row) > col_map['result']    else None,
                 "norm":      row[col_map['norm']]      if col_map.get('norm')      is not None and len(row) > col_map['norm']      else None,
                 "unit":      row[col_map['unit']]      if col_map.get('unit')      is not None and len(row) > col_map['unit']      else None,
             }
@@ -338,6 +339,6 @@ class MedicalLabParser:
                 
         expanded_rows = expand_composite_rows(extracted_rows)
         results_with_units = infer_missing_units(expanded_rows)
-        final_results = normalize_time_values(results_with_units)
+        final_results = normalize_result_values(results_with_units)
 
         return final_results

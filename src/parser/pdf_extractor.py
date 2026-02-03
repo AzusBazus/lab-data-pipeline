@@ -11,55 +11,49 @@ class MedicalLabParser:
         self.metadata = {}
 
     def parse(self):
-        """
-        Main method to extract data.
-        Returns: (patient_info_dict, list_of_results)
-        """
         extracted_results = []
         patient_info = {}
         
-        current_context = "Unknown Category" # State variable
+        current_context = "Unknown Category"
+        current_col_map = None # <--- New State Variable
 
         print(f"--- Parsing {self.filename} ---")
 
         with pdfplumber.open(self.filepath) as pdf:
-            # --- STEP 1: Extract Patient Info (Page 1) ---
             if len(pdf.pages) > 0:
                 patient_info = self._extract_patient_info(pdf.pages[0])
 
-            # --- STEP 2: Iterate all pages for Tables ---
             for page_num, page in enumerate(pdf.pages):
-                # Get text lines for header detection
                 text_lines = page.extract_text_lines()
-
-                # Extract Metadata (Creation Date)
                 self._extract_metadata_from_noise(text_lines)
                 
-                # Get tables
                 tables = page.find_tables()
-                # Sort top-to-bottom
                 tables.sort(key=lambda t: t.bbox[1])
 
                 for i, table in enumerate(tables):
-                    # A. Find the Label (The "Y-Axis Truth")
                     label = self._find_header_above_table(table.bbox, text_lines)
                     
-                    # If no label found, we implicitly keep the old current_context
+                    # LOGIC: New Label = New Context AND New Structure
                     if label:
                         current_context = label
+                        current_col_map = None # Reset mapping for new section
                     
-                    # B. Extract Data
                     data = table.extract()
+                    if not data: continue
+                    if self._is_patient_table(data): continue
 
-                    if not data:
-                        continue
-
-                    # C. Clean and Append Data
-                    # Skip if it's the patient info table (contains "Ф.И.О.")
-                    if self._is_patient_table(data):
-                        continue
-
-                    cleaned_rows = self._process_table_rows(data, current_context, page_num)
+                    # Pass the inherited map, receive the updated map
+                    cleaned_rows, used_map = self._process_table_rows(
+                        data, 
+                        current_context, 
+                        page_num, 
+                        inherited_map=current_col_map
+                    )
+                    
+                    # Persist the map for the next loop/page
+                    if used_map:
+                        current_col_map = used_map
+                        
                     extracted_results.extend(cleaned_rows)
 
         return patient_info, extracted_results
@@ -273,7 +267,8 @@ class MedicalLabParser:
                 if not cell: continue
                 if any(is_fuzzy_match(str(cell), t) for t in target_headers):
                     return i
-        return 0 # Fallback to first row
+        print("⚠️ Could not find header row.")
+        return None
 
     def _map_header_indices(self, header_row):
         """
@@ -304,41 +299,60 @@ class MedicalLabParser:
             
         return col_map
 
-    def _process_table_rows(self, data, context, page_num):
+    def _process_table_rows(self, data, context, page_num, inherited_map=None):
         extracted_rows = []
-        if not data: return results
+        if not data: return [], inherited_map # Return empty list AND current map
 
-        # 1. Identify the Header Row
+        # --- STEP 1: Determine Structure ---
         header_idx = self._find_header_row_index(data)
         
-        # 2. Map Columns (The Upgrade)
-        # This returns something like: {'test_name': 0, 'result': 2, 'unit': 3}
-        header_row = data[header_idx]
-        col_map = self._map_header_indices(header_row)
-
-        # 3. Iterate rows AFTER the header
-        for row in data[header_idx+1:]:
+        col_map = None
+        start_row_idx = 0
+        
+        # Case A: We found a clear header row (New Table or Repeated Header)
+        if header_idx is not None:
+            col_map = self._map_header_indices(data[header_idx])
+            start_row_idx = header_idx + 1 # Skip the header
+            
+        # Case B: No header found, but we have a map from the previous page (Continuation)
+        elif inherited_map is not None:
+            col_map = inherited_map
+            start_row_idx = 0 # No header to skip, start at data
+            
+        # Case C: No header, no history (First table, but messy)
+        else:
+            # Fallback: Try to map row 0, which will likely trigger the Failsafe default
+            col_map = self._map_header_indices(data[0])
+            start_row_idx = 1 # Assume row 0 was the header
+            
+        # --- STEP 2: Extract Basic Dictionaries ---
+        for row in data[start_row_idx:]:
             if not row or len(row) < 2: continue
             
-            # Use the map to pluck values safely
+            # Helper to get cell content safely
+            def get_col(name):
+                idx = col_map.get(name)
+                if idx is not None and len(row) > idx:
+                    return row[idx]
+                return None
+
             clean_row = {
                 "category": context,
                 "page": page_num + 1,
-                
-                # Fetch using the mapped index, or None if that column wasn't found
-                "test_name": row[col_map['test_name']] if col_map.get('test_name') is not None and len(row) > col_map['test_name'] else None,
-                "value":     row[col_map['result']]    if col_map.get('result')    is not None and len(row) > col_map['result']    else None,
-                "text_value":row[col_map['result']]    if col_map.get('result')    is not None and len(row) > col_map['result']    else None,
-                "norm":      row[col_map['norm']]      if col_map.get('norm')      is not None and len(row) > col_map['norm']      else None,
-                "unit":      row[col_map['unit']]      if col_map.get('unit')      is not None and len(row) > col_map['unit']      else None,
+                "test_name": get_col('test_name'),
+                "value":     get_col('result'),
+                "text_value": get_col('result'), 
+                "norm":      get_col('norm'),
+                "unit":      get_col('unit'),
             }
             
-            # Integrity Check: If we didn't find a Result or a Name, this row is likely garbage
             if clean_row['test_name'] and clean_row['value']:
                 extracted_rows.append(clean_row)
-                
+
+        # --- STEP 3: Pipeline Processing ---
         expanded_rows = expand_composite_rows(extracted_rows)
         results_with_units = infer_missing_units(expanded_rows)
         final_results = normalize_result_values(results_with_units)
 
-        return final_results
+        # RETURN both the results AND the map we used/created
+        return final_results, col_map

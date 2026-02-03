@@ -2,6 +2,7 @@ import re
 import pdfplumber
 from src.utils.text_matching import is_fuzzy_match
 from src.parser.cleaner import expand_composite_rows, infer_missing_units, normalize_result_values
+from src.parser.table_structure import flatten_hierarchical_table, is_table_hierarchical
 from src.config import COLUMN_KEYWORDS, NOISE_PATTERNS, PATIENT_FIELDS, DATE_PATTERN
 
 class MedicalLabParser:
@@ -15,7 +16,8 @@ class MedicalLabParser:
         patient_info = {}
         
         current_context = "Unknown Category"
-        current_col_map = None # <--- New State Variable
+        current_col_map = None 
+        current_parent_cat = None 
 
         print(f"--- Parsing {self.filename} ---")
 
@@ -36,11 +38,21 @@ class MedicalLabParser:
                     # LOGIC: New Label = New Context AND New Structure
                     if label:
                         current_context = label
-                        current_col_map = None # Reset mapping for new section
+                        current_col_map = None
+                        current_parent_cat = None 
                     
                     data = table.extract()
                     if not data: continue
                     if self._is_patient_table(data): continue
+
+                    if is_table_hierarchical(data) or (current_parent_cat is not None):
+                        # Flatten it! Pass the state from previous page/table
+                        data, current_parent_cat = flatten_hierarchical_table(
+                            data, 
+                            inherited_parent=current_parent_cat
+                        )
+                    else:
+                        current_parent_cat = None
 
                     # Pass the inherited map, receive the updated map
                     cleaned_rows, used_map = self._process_table_rows(

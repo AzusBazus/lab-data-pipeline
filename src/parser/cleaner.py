@@ -145,3 +145,4 @@ def normalize_result_values(rows):
             row['value'] = None
 
     return rows
+

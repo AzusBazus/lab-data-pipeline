@@ -4,6 +4,7 @@ from src.utils.text_matching import is_fuzzy_match
 from src.parser.cleaner import expand_composite_rows, infer_missing_units, normalize_result_values
 from src.parser.table_structure import flatten_hierarchical_table, is_table_hierarchical
 from src.config import COLUMN_KEYWORDS, NOISE_PATTERNS, PATIENT_FIELDS, DATE_PATTERN
+from src.parser.dataframe_cleaner import TableNormalizer
 
 class MedicalLabParser:
     def __init__(self, filepath):
@@ -14,7 +15,6 @@ class MedicalLabParser:
     def parse(self):
         extracted_results = []
         patient_info = {}
-        
         current_context = "Unknown Category"
         current_col_map = None 
         current_parent_cat = None 
@@ -44,6 +44,8 @@ class MedicalLabParser:
                     data = table.extract()
                     if not data: continue
                     if self._is_patient_table(data): continue
+
+                    data = TableNormalizer.clean_and_normalize(data)
 
                     if is_table_hierarchical(data) or (current_parent_cat is not None):
                         # Flatten it! Pass the state from previous page/table
@@ -310,6 +312,7 @@ class MedicalLabParser:
             return {'test_name': 0, 'result': 1, 'norm': 2, 'unit': 3}
             
         return col_map
+
 
     def _process_table_rows(self, data, context, page_num, inherited_map=None):
         extracted_rows = []

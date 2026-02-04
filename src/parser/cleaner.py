@@ -86,7 +86,7 @@ def _detect_unit_keyword(text):
     Used by both Row Expansion (for renaming) and Unit Inference (for filling).
     """
     if not text: return None
-    text_lower = text.lower()
+    text_lower = text.lower() if isinstance(text, str) else str(text).lower()
     
     for canonical_unit, keywords in UNIT_SUFFIX_MAP.items():
         for keyword in keywords:

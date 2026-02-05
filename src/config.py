@@ -42,8 +42,10 @@ NOISE_PATTERNS = [
 
 PATIENT_FIELDS = {
     "name": ["ф.и.о.", "фио", "patient", "name", "full name", "фамилия"],
-    "dob": ["дата рождения", "др", "dob", "date of birth", "birth date"],
-    "report_date": ["дата", "date", "date of report", "creation date"]
+    "dob": ["дата рождения", "год рождения" "др", "dob", "date of birth", "birth date"],
+    "report_date": ["дата", "date", "date of report", "creation date"],
+    'height': ["рост", "height", "length"],
+    'weight': ["вес", "weight", "mass", "body weight"]
 }
 
 UNIT_SUFFIX_MAP = {
@@ -67,3 +69,8 @@ TIME_PATTERNS = {
 # Regex for finding dates with various separators (., -, /)
 # Captures: 30.01.2026, 30-01-2026, 30/01/2026
 DATE_PATTERN = re.compile(r'\b(\d{2})[./-](\d{2})[./-](\d{4})\b')
+
+# Regex for finding years (19xx or 20xx)
+YEAR_PATTERN = re.compile(r'\b(19|20)\d{2}\b')
+
+HIDDEN_RESULT_KEYWORDS = ["посеве обнаружено", "рост микрофлоры", "detected"]

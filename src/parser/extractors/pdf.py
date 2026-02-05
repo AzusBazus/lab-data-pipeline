@@ -1,9 +1,9 @@
 import re
 import pdfplumber
 from src.parser.utils.text_matching import is_fuzzy_match
-from src.parser.processors.value_engine import ValueEngine
-from src.parser.processors.table_engine import TableEngine
-from src.config import COLUMN_KEYWORDS, NOISE_PATTERNS, PATIENT_FIELDS, DATE_PATTERN
+from src.parser.processors.table_handler import TableHandler
+from src.parser.processors.interpreter import Interpreter
+from src.config import NOISE_PATTERNS, PATIENT_FIELDS, DATE_PATTERN
 
 class MedicalLabParser:
     def __init__(self, filepath):
@@ -42,13 +42,13 @@ class MedicalLabParser:
                     
                     data = table.extract()
                     if not data: continue
-                    if self._is_patient_table(data): continue
+                    if Interpreter.is_patient_table(data): continue
 
-                    data = TableEngine.clean_and_normalize(data)
+                    data = TableHandler.clean_and_normalize(data)
 
-                    if TableEngine.is_table_hierarchical(data) or (current_parent_cat is not None):
+                    if TableHandler.is_table_hierarchical(data) or (current_parent_cat is not None):
                         # Flatten it! Pass the state from previous page/table
-                        data, current_parent_cat = TableEngine.flatten_hierarchical_table(
+                        data, current_parent_cat = TableHandler.flatten_hierarchical_table(
                             data, 
                             inherited_parent=current_parent_cat
                         )
@@ -56,7 +56,7 @@ class MedicalLabParser:
                         current_parent_cat = None
 
                     # Pass the inherited map, receive the updated map
-                    cleaned_rows, used_map = self._process_table_rows(
+                    cleaned_rows, used_map = Interpreter.process_table_data(
                         data, 
                         current_context, 
                         page_num, 
@@ -249,124 +249,3 @@ class MedicalLabParser:
     def _is_noise(self, text):
         """Returns True if text matches any of our known noise patterns."""
         return any(pattern.search(text) for pattern in NOISE_PATTERNS)
-
-    def _is_patient_table(self, data):
-        """
-        Robust check: Looks for 'Ф.И.О.' or 'Patient Name' anywhere in the table.
-        """
-        # Flatten the table into a set of unique strings to search faster
-        unique_words = set()
-        for row in data:
-            for cell in row:
-                if cell:
-                    unique_words.add(str(cell))
-    
-        # Check our known keywords
-        anchors = ["ф.и.о.", "фамилия", "patient", "name"]
-    
-        for word in unique_words:
-            for anchor in anchors:
-                if is_fuzzy_match(word, anchor, threshold=90):
-                    return True
-        return False
-
-    def _find_header_row_index(self, data):
-        """Finds the row index that contains column headers."""
-        # We look for the "Result" column as the strongest anchor
-        target_headers = COLUMN_KEYWORDS['result']
-        
-        for i, row in enumerate(data):
-            for cell in row:
-                if not cell: continue
-                if any(is_fuzzy_match(str(cell), t) for t in target_headers):
-                    return i
-        print("⚠️ Could not find header row.")
-        return None
-
-    def _map_header_indices(self, header_row):
-        """
-        Analyzes a single header row and figures out which index is which.
-        Returns: dict { 'test_name': 0, 'result': 2, ... }
-        """
-        col_map = {}
-        
-        # Iterate over our known concepts (test_name, result, etc.)
-        for col_type, keywords in COLUMN_KEYWORDS.items():
-            
-            # Check every cell in the header row
-            for idx, cell in enumerate(header_row):
-                if not cell: continue
-                
-                # Check fuzzy match against ALL keywords for this concept
-                # We use a higher threshold (90) here because headers are usually clear
-                if any(is_fuzzy_match(str(cell), k, threshold=88) for k in keywords):
-                    col_map[col_type] = idx
-                    break # Stop looking for this column once found
-        
-        # FAILSAFE: If fuzzy matching failed completely (e.g. empty header), 
-        # revert to the "standard" structure you observed: [Name, Result, Norm, Unit]
-        if 'result' not in col_map:
-            # You can log a warning here if you want
-            print(f"⚠️ Warning: Could not auto-map columns. Using default structure.")
-            return {'test_name': 0, 'result': 1, 'norm': 2, 'unit': 3}
-            
-        return col_map
-
-
-    def _process_table_rows(self, data, context, page_num, inherited_map=None):
-        extracted_rows = []
-        if not data: return [], inherited_map # Return empty list AND current map
-
-        # --- STEP 1: Determine Structure ---
-        header_idx = self._find_header_row_index(data)
-        
-        col_map = None
-        start_row_idx = 0
-        
-        # Case A: We found a clear header row (New Table or Repeated Header)
-        if header_idx is not None:
-            col_map = self._map_header_indices(data[header_idx])
-            start_row_idx = header_idx + 1 # Skip the header
-            
-        # Case B: No header found, but we have a map from the previous page (Continuation)
-        elif inherited_map is not None:
-            col_map = inherited_map
-            start_row_idx = 0 # No header to skip, start at data
-            
-        # Case C: No header, no history (First table, but messy)
-        else:
-            # Fallback: Try to map row 0, which will likely trigger the Failsafe default
-            col_map = self._map_header_indices(data[0])
-            start_row_idx = 1 # Assume row 0 was the header
-            
-        # --- STEP 2: Extract Basic Dictionaries ---
-        for row in data[start_row_idx:]:
-            if not row or len(row) < 2: continue
-            
-            # Helper to get cell content safely
-            def get_col(name):
-                idx = col_map.get(name)
-                if idx is not None and len(row) > idx:
-                    return row[idx]
-                return None
-
-            clean_row = {
-                "category": context,
-                "page": page_num + 1,
-                "test_name": get_col('test_name'),
-                "value":     get_col('result'),
-                "text_value": get_col('result'), 
-                "norm":      get_col('norm'),
-                "unit":      get_col('unit'),
-            }
-            
-            if clean_row['test_name'] and clean_row['value']:
-                extracted_rows.append(clean_row)
-
-        # --- STEP 3: Pipeline Processing ---
-        expanded_rows = ValueEngine.expand_composite_rows(extracted_rows)
-        results_with_units = ValueEngine.infer_missing_units(expanded_rows)
-        final_results = ValueEngine.normalize_result_values(results_with_units)
-
-        # RETURN both the results AND the map we used/created
-        return final_results, col_map

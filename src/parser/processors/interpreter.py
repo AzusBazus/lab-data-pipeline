@@ -1,4 +1,4 @@
-from src.config import COLUMN_KEYWORDS, PATIENT_FIELDS, DATE_PATTERN
+from src.config import COLUMN_KEYWORDS, PATIENT_FIELDS, DATE_PATTERN, YEAR_PATTERN
 from src.parser.utils.text_matching import is_fuzzy_match
 from src.parser.processors.value_handler import ValueHandler
 
@@ -200,7 +200,13 @@ class Interpreter:
     @staticmethod
     def _extract_date_string(text):
         if not text: return None
+        
         match = DATE_PATTERN.search(text)
         if match:
-            return f"{match.group(1)}.{match.group(2)}.{match.group(3)}"
+             return f"{match.group(1)}.{match.group(2)}.{match.group(3)}"
+
+        year_match = YEAR_PATTERN.search(text)
+        if year_match:
+            return f"00.00.{year_match.group(0)}"
+            
         return None

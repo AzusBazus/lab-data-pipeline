@@ -1,14 +1,14 @@
 from src.config import UNIT_SUFFIX_MAP, TIME_PATTERNS
 import re
 
-class ValueEngine:
+class ValueHandler:
     @staticmethod
     def expand_composite_rows(raw_rows):
         """Stage 1: Split multi-line rows."""
         expanded_rows = []
         for row in raw_rows:
-            if ValueEngine._is_row_expandable(row):
-                expanded_rows.extend(ValueEngine._split_and_suffix_row(row))
+            if ValueHandler._is_row_expandable(row):
+                expanded_rows.extend(ValueHandler._split_and_suffix_row(row))
             else:
                 expanded_rows.append(row)
         return expanded_rows
@@ -55,7 +55,7 @@ class ValueEngine:
             new_row['norm'] = aligned_norms[i]
             
             # Suffix Generation
-            suffix = ValueEngine._detect_unit_keyword(new_row['norm'])
+            suffix = ValueHandler._detect_unit_keyword(new_row['norm'])
             if suffix:
                 new_row['test_name'] = f"{row['test_name']} ({suffix})"
             else:
@@ -75,7 +75,7 @@ class ValueEngine:
 
             # Strategy B: Check Norm for clues
             norm_text = row.get('norm')
-            found_unit = ValueEngine._detect_unit_keyword(norm_text)
+            found_unit = ValueHandler._detect_unit_keyword(norm_text)
             
             if found_unit:
                 row['unit'] = found_unit

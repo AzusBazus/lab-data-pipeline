@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from src.config import COLUMN_KEYWORDS
 
-class TableEngine:
+class TableHandler:
     
     @staticmethod
     def clean_and_normalize(data: list) -> list:
@@ -18,10 +18,10 @@ class TableEngine:
         df = df.replace([None, 'None', '', r'^\s*$'], np.nan, regex=True)
         
         # 3. Trim Trailing Ghost Columns (Right-to-Left based on Header)
-        df = TableEngine._trim_trailing_ghosts(df)
+        df = TableHandler._trim_trailing_ghosts(df)
         
         # 4. Merge Complementary Columns (The "Zipper" Logic)
-        df = TableEngine._merge_complementary_columns(df)
+        df = TableHandler._merge_complementary_columns(df)
         
         # 5. Convert back to list of lists (replacing NaNs with None for compatibility)
         return df.where(pd.notnull(df), None).values.tolist()

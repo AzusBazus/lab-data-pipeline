@@ -1,7 +1,7 @@
 import os
 import json
 from src.config import RAW_DATA_DIR
-from src.parser.pdf_extractor import MedicalLabParser
+from src.parser.extractors.pdf import MedicalLabParser
 
 def main():
     # 1. Get files

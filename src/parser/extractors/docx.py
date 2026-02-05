@@ -1,5 +1,6 @@
-import os
 from docx import Document
+import os
+from src.parser.processors.interpreter import Interpreter
 
 class DocxMedicalParser:
     def __init__(self, filepath):
@@ -7,33 +8,29 @@ class DocxMedicalParser:
         self.filename = os.path.basename(filepath)
 
     def parse(self):
-        """
-        Main entry point for DOCX files.
-        Currently just dumps content for inspection.
-        """
         print(f"--- Parsing DOCX: {self.filename} ---")
-        
-        if not os.path.exists(self.filepath):
-            print(f"Error: File not found {self.filepath}")
-            return {}, []
+        if not os.path.exists(self.filepath): return {}, []
 
         document = Document(self.filepath)
+        all_results = []
         
-        # 1. Inspect Paragraphs (Text outside tables)
-        print("\n--- Raw Paragraphs ---")
-        for i, para in enumerate(document.paragraphs):
-            text = para.text.strip()
-            if text:
-                print(f"Para {i}: {text}")
+        # 1. Get all tables as raw lists of lists
+        raw_tables = []
+        for table in document.tables:
+            grid = [[cell.text.strip().replace('\n', ' ') for cell in row.cells] for row in table.rows]
+            raw_tables.append(grid)
+            
+        # 2. Extract Patient Info & The "Hidden Result"
+        patient_info, extra_results = Interpreter.extract_patient_info(raw_tables)
+        all_results.extend(extra_results)
+        
+        # 3. Process the Result Tables
+        for grid in raw_tables:
+            if Interpreter.is_patient_table(grid): 
+                continue
+                
+            # TODO: Demultiplex (Split Red/Blue/Yellow) logic will go here!
+            # For now, just print to confirm we are skipping the patient table
+            print(f"Found Data Table with {len(grid)} rows")
 
-        # 2. Inspect Tables
-        print("\n--- Raw Tables ---")
-        for i, table in enumerate(document.tables):
-            print(f"Table {i} (Rows: {len(table.rows)}, Cols: {len(table.columns)})")
-            for row in table.rows:
-                # Extract text from each cell
-                row_data = [cell.text.strip().replace('\n', ' ') for cell in row.cells]
-                print(row_data)
-
-        # Return empty dummy data for now so main.py doesn't crash
-        return {}, []
+        return patient_info, all_results

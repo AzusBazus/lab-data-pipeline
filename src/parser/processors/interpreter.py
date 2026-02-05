@@ -1,4 +1,6 @@
-from src.config import COLUMN_KEYWORDS, PATIENT_FIELDS, DATE_PATTERN, YEAR_PATTERN
+import re
+import pandas as pd
+from src.config import COLUMN_KEYWORDS, PATIENT_FIELDS, DATE_PATTERN, YEAR_PATTERN, HIDDEN_RESULT_KEYWORDS
 from src.parser.utils.text_matching import is_fuzzy_match
 from src.parser.processors.value_handler import ValueHandler
 
@@ -105,7 +107,7 @@ class Interpreter:
         for table in tables:
             # Check if this table looks like a patient table
             if Interpreter._is_patient_info_table(table):
-                # Parse it
+                print(pd.DataFrame(table))
                 info, new_results = Interpreter._parse_patient_table(table)
                 # Merge found info
                 extra_results.extend(new_results)
@@ -135,34 +137,59 @@ class Interpreter:
         
         # Keywords for the "Hidden Result" in the patient header
         # "В посеве обнаружено" -> "Detected in culture"
-        HIDDEN_RESULT_KEYWORDS = ["посеве обнаружено", "рост микрофлоры", "detected"]
+        
 
         for r_idx, row in enumerate(table_data):
             for c_idx, cell in enumerate(row):
                 if not cell: continue
                 cell_text = str(cell).strip()
+                cell_lower = cell_text.lower()
                 
                 # 1. Check for Name
-                if not info.get('name') and any(is_fuzzy_match(cell_text, k) for k in PATIENT_FIELDS['name']):
+                if not info.get('name') and any(is_fuzzy_match(cell_lower, k) for k in PATIENT_FIELDS['name']):
                     val = Interpreter._get_next_cell_value(table_data, r_idx, c_idx)
                     if val: info['name'] = val
                     continue
 
                 # 2. Check for DOB
-                if not info.get('dob') and any(is_fuzzy_match(cell_text, k) for k in PATIENT_FIELDS['dob']):
+                if not info.get('dob') and any(is_fuzzy_match(cell_lower, k) for k in PATIENT_FIELDS['dob']):
                     val = Interpreter._get_next_cell_value(table_data, r_idx, c_idx)
                     date_str = Interpreter._extract_date_string(val)
                     if date_str: info['dob'] = date_str
                     continue
                 
                 # 3. Check for Report Date
-                if any(is_fuzzy_match(cell_text, k) for k in PATIENT_FIELDS['report_date']):
+                if any(is_fuzzy_match(cell_lower, k) for k in PATIENT_FIELDS['report_date']):
                     # Ensure it's not actually the DOB field (fuzzy match overlap)
-                    if not any(is_fuzzy_match(cell_text, k) for k in PATIENT_FIELDS['dob']):
+                    if not any(is_fuzzy_match(cell_lower, k) for k in PATIENT_FIELDS['dob']):
                         val = Interpreter._get_next_cell_value(table_data, r_idx, c_idx)
                         date_str = Interpreter._extract_date_string(val)
                         if date_str: info['report_date'] = date_str
                     continue
+
+                # --- NEW: HEIGHT ---
+                if not info.get('height') and any(k in cell_lower for k in PATIENT_FIELDS['height']):
+                    # Strategy A: Check inside CURRENT cell (e.g. "Рост: 180см")
+                    val = Interpreter._standardize_height(cell_text)
+                    
+                    # Strategy B: If not found, check NEXT cell
+                    if not val:
+                        next_cell = Interpreter._get_next_cell_value(table_data, r_idx, c_idx)
+                        val = Interpreter._standardize_height(next_cell)
+                    
+                    if val: info['height_cm'] = val # Store as explicit unit
+
+                # --- NEW: WEIGHT ---
+                if not info.get('weight') and any(k in cell_lower for k in PATIENT_FIELDS['weight']):
+                    # Strategy A: Check inside CURRENT cell
+                    val = Interpreter._standardize_weight(cell_text)
+                    
+                    # Strategy B: Check NEXT cell
+                    if not val:
+                        next_cell = Interpreter._get_next_cell_value(table_data, r_idx, c_idx)
+                        val = Interpreter._standardize_weight(next_cell)
+                        
+                    if val: info['weight_kg'] = val
 
                 # 4. THE HIDDEN RESULT ("В посеве обнаружено")
                 if any(is_fuzzy_match(cell_text, k) for k in HIDDEN_RESULT_KEYWORDS):
@@ -208,5 +235,50 @@ class Interpreter:
         year_match = YEAR_PATTERN.search(text)
         if year_match:
             return f"00.00.{year_match.group(0)}"
+            
+        return None
+
+    @staticmethod
+    def _standardize_height(text):
+        """
+        Parses height string and returns Float in CM.
+        Handles: "1м72см", "172 см", "1.72 м", "185см"
+        """
+        if not text: return None
+        text = text.lower().replace(',', '.').replace(' ', '')
+        
+        # Pattern 1: Composite (e.g., 1м72, 1m72cm)
+        # Looks for digit + 'м' + digit
+        composite_match = re.search(r'(\d+)[мm](\d+)', text)
+        if composite_match:
+            meters = float(composite_match.group(1))
+            cm = float(composite_match.group(2))
+            return round(meters * 100 + cm, 1)
+
+        # Pattern 2: Centimeters (e.g., 185см, 185cm)
+        cm_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:см|cm)', text)
+        if cm_match:
+            return float(cm_match.group(1))
+            
+        # Pattern 3: Meters (e.g., 1.72м, 1.72m)
+        m_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:м|m)\b', text)
+        if m_match:
+            return round(float(m_match.group(1)) * 100, 1)
+            
+        return None
+
+    @staticmethod
+    def _standardize_weight(text):
+        """
+        Parses weight string and returns Float in KG.
+        Handles: "127кг", "127.5 kg"
+        """
+        if not text: return None
+        text = text.lower().replace(',', '.').replace(' ', '')
+        
+        # Simple Number + Unit
+        match = re.search(r'(\d+(?:\.\d+)?)\s*(?:кг|kg)', text)
+        if match:
+            return float(match.group(1))
             
         return None

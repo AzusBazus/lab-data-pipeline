@@ -189,3 +189,54 @@ class TableHandler:
         
         first_cell = str(table_data[0][0] or "").strip()
         return "no" in first_cell.lower() or "№" in first_cell
+
+    @staticmethod
+    def demultiplex(df):
+        """
+        Detects and splits 'Double-Wide' tables (Multi-column layouts).
+        Returns a list of DataFrames (1 or 2).
+        """
+        # 1. Sanity Check: Needs at least 4 columns to be a split candidate
+        if df.shape[1] < 4:
+            return [df]
+
+        # 2. The Heuristic: Name vs Value Length
+        # We assume strict structure: [Name, Val, Name, Val]
+        col_lengths = []
+        for i in range(4):
+            # Calculate mean length of non-empty cells in this column
+            # We convert to string, strip, and measure
+            text_series = df.iloc[:, i].astype(str).str.strip()
+            # Filter out empty strings and 'nan'
+            valid_cells = text_series[text_series.str.len() > 0]
+            valid_cells = valid_cells[valid_cells != 'nan']
+            
+            if len(valid_cells) == 0:
+                col_lengths.append(0)
+            else:
+                col_lengths.append(valid_cells.str.len().mean())
+
+        # Check the pattern: Long, Short, Long, Short
+        # We use a safety margin (e.g., Name must be 2x longer than Value on average)
+        # Values like 'R', 'S', '-' are len 1. Names are len 10+. Ratio is huge.
+        is_split_structure = (
+            (col_lengths[0] > col_lengths[1] * 1.5) and 
+            (col_lengths[2] > col_lengths[3] * 1.5)
+        )
+
+        if not is_split_structure:
+            return [df]
+
+        print("✂️  Detected Multi-Column Table. Demultiplexing...")
+
+        # 3. Perform the Split
+        # Left Table (Cols 0, 1)
+        df_left = df.iloc[:, [0, 1]].copy()
+        
+        # Right Table (Cols 2, 3)
+        df_right = df.iloc[:, [2, 3]].copy()
+        
+        # Rename columns to standard 0, 1 for consistent processing downstream
+        df_right.columns = range(df_right.shape[1])
+
+        return [df_left, df_right]

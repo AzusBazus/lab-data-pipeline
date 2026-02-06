@@ -1,19 +1,27 @@
 from rapidfuzz import fuzz
 
-def is_fuzzy_match(value, target, threshold=85):
-    """
-    Checks if 'value' is similar to 'target'.
-    """
-    if not value or not target:
+def is_fuzzy_match(text, keyword, threshold=90):
+    if not text or not keyword:
         return False
     
-    # 1. Exact Match (Fastest)
-    if value.lower().strip() == target.lower().strip():
+    text = text.lower()
+    keyword = keyword.lower()
+    
+    # 1. Exact Substring Check (Fastest)
+    if keyword in text:
         return True
         
-    # 2. Fuzzy Match (Slower, but handles typos)
-    # partial_ratio handles substrings well (e.g. "Result:" vs "Result")
-    score = fuzz.partial_ratio(value.lower(), target.lower())
+    # 2. Length Safety Check
+    # If one string is significantly shorter than the other, partial_ratio is dangerous.
+    # e.g. "a" vs "apple" -> partial_ratio is 100.
+    if len(text) < 3 or len(keyword) < 3:
+        return text == keyword # Force exact match for short strings
+
+    # 3. Fuzzy Check
+    # partial_ratio is good for "Patient Name:" vs "Name"
+    # ratio is good for "Date" vs "Data"
+    score = fuzz.partial_ratio(text, keyword)
+    
     return score >= threshold
 
 def find_best_match(value, candidates, threshold=85):

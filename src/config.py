@@ -41,9 +41,9 @@ NOISE_PATTERNS = [
 ]
 
 PATIENT_FIELDS = {
-    "name": ["ф.и.о.", "фио", "patient", "name", "full name", "фамилия"],
-    "dob": ["дата рождения", "год рождения" "др", "dob", "date of birth", "birth date"],
-    "report_date": ["дата", "date", "date of report", "creation date"],
+    'name': ["ф.и.о.", "фамилия", "patient name", "full name", "фио"],
+    'dob': ["дата рождения", "dob", "born", "birth", "рождения", "год рождения"],
+    'report_date': ["дата", "date", "created"],
     'height': ["рост", "height", "length"],
     'weight': ["вес", "weight", "mass", "body weight"]
 }

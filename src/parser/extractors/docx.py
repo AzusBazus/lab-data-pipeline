@@ -1,6 +1,8 @@
 from docx import Document
 import os
+import pandas as pd
 from src.parser.processors.interpreter import Interpreter
+from src.parser.processors.table_handler import TableHandler
 
 class DocxMedicalParser:
     def __init__(self, filepath):
@@ -29,8 +31,14 @@ class DocxMedicalParser:
             if Interpreter.is_patient_table(grid): 
                 continue
                 
-            # TODO: Demultiplex (Split Red/Blue/Yellow) logic will go here!
-            # For now, just print to confirm we are skipping the patient table
-            print(f"Found Data Table with {len(grid)} rows")
+            split_tables = TableHandler.demultiplex(pd.DataFrame(grid))
+            for table in split_tables:
+                print("Table:")
+                print(table)
 
         return patient_info, all_results
+
+    
+        
+
+    

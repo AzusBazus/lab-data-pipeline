@@ -1,5 +1,6 @@
 from docx import Document
 import os
+import pandas as pd
 from src.parser.processors.interpreter import Interpreter
 
 class DocxMedicalParser:
@@ -34,3 +35,5 @@ class DocxMedicalParser:
             print(f"Found Data Table with {len(grid)} rows")
 
         return patient_info, all_results
+
+    

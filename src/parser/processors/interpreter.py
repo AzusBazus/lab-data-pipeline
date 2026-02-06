@@ -61,13 +61,46 @@ class Interpreter:
         return final_results, col_map
 
     @staticmethod
-    def is_patient_table(data):
-        """Checks if table contains patient metadata keywords."""
-        unique_words = set(str(cell) for row in data for cell in row if cell)
-        anchors = ["ф.и.о.", "фамилия", "patient", "name"]
+    def is_patient_table(table_data):
+        """
+        Universal check: Does this table contain metadata labels (FIO, DOB)?
+        """
+        # Optimization: Flatten once, lower-case once
+        unique_words = set()
+        for row in table_data:
+            for cell in row:
+                if cell:
+                    # Clean the cell content: remove numbers, punctuation, extra spaces
+                    # This helps isolated words stand out
+                    cleaned_cell = str(cell).lower().strip()
+                    unique_words.add(cleaned_cell)
+
+        # Check against our config
+        identifying_anchors = PATIENT_FIELDS['name'] + PATIENT_FIELDS['dob']
+        
         for word in unique_words:
-            for anchor in anchors:
-                if is_fuzzy_match(word, anchor, threshold=90):
+            # FIX 1: Ignore short garbage tokens (like 'r', 'S', 'R', '-', '1')
+            if len(word) < 3: 
+                continue
+
+            for anchor in identifying_anchors:
+                # FIX 2: Ensure anchor is also reasonable length (sanity check)
+                if len(anchor) < 3:
+                    continue
+                
+                # FIX 3: Strict matching
+                # We check two things:
+                # A. Fuzzy match is high
+                # B. The length difference isn't massive (prevents "r" matching "born")
+                if is_fuzzy_match(word, anchor, threshold=92):
+                    
+                    # Double Check: Is it a ridiculous substring match?
+                    # e.g. matching "r" inside "born" is wrong.
+                    len_diff = abs(len(word) - len(anchor))
+                    if len_diff > 3: 
+                        continue
+
+                    # print(f"Patient table match: '{word}' matches anchor '{anchor}'")
                     return True
         return False
 
@@ -106,8 +139,7 @@ class Interpreter:
 
         for table in tables:
             # Check if this table looks like a patient table
-            if Interpreter._is_patient_info_table(table):
-                print(pd.DataFrame(table))
+            if Interpreter.is_patient_table(table):
                 info, new_results = Interpreter._parse_patient_table(table)
                 # Merge found info
                 extra_results.extend(new_results)
@@ -117,15 +149,6 @@ class Interpreter:
                     break
         
         return info, extra_results
-
-    @staticmethod
-    def _is_patient_info_table(table_data):
-        """Returns True if the table contains 'Name' or 'DOB' keywords."""
-        for row in table_data:
-            for cell in row:
-                if cell and any(is_fuzzy_match(str(cell), k) for k in PATIENT_FIELDS['name']):
-                    return True
-        return False
 
     @staticmethod
     def _parse_patient_table(table_data):

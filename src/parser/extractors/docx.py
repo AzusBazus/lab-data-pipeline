@@ -31,10 +31,16 @@ class DocxMedicalParser:
             if Interpreter.is_patient_table(grid): 
                 continue
                 
-            split_tables = TableHandler.demultiplex(pd.DataFrame(grid))
-            for table in split_tables:
+            # Convert to DataFrame for handling
+            df = pd.DataFrame(grid)
+            
+            # A. Demultiplex (Splits 1 table into 2 if needed)
+            split_dfs = TableHandler.demultiplex(df)
+            
+            for sub_df in split_dfs:
                 print("Table:")
-                print(table)
+                print(sub_df)
+                print("\n")
 
         return patient_info, all_results
 

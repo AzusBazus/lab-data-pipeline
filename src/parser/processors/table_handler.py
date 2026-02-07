@@ -193,50 +193,75 @@ class TableHandler:
     @staticmethod
     def demultiplex(df):
         """
-        Detects and splits 'Double-Wide' tables (Multi-column layouts).
-        Returns a list of DataFrames (1 or 2).
+        Detects 'Double-Wide' tables (Name, Value, Name, Value) and splits them 
+        into two standard tables (Name, Value).
+        
+        Also injects standardized headers so the Interpreter maps them instantly.
         """
-        # 1. Sanity Check: Needs at least 4 columns to be a split candidate
-        if df.shape[1] < 4:
-            return [df]
+        if df is None or df.empty:
+            return []
+            
+        # 1. Check if we need to split
+        if TableHandler._is_demultiplexable(df):
+            print("✂️  Detected Multi-Column Table. Demultiplexing...")
+            
+            # Create Standard Header Row
+            # We use Russian keywords that we KNOW your config catches
+            # ['Наименование', 'Результат']
+            standard_header = pd.DataFrame([['Наименование', 'Результат']], columns=[0, 1])
+            
+            # --- SPLIT LEFT (Cols 0, 1) ---
+            # We skip the original header (row 0) because it's usually merged/messy
+            df_left_data = df.iloc[1:, [0, 1]].copy()
+            df_left_data.columns = [0, 1] # Reset columns to match header
+            
+            # Concatenate: [Standard Header] + [Data]
+            df_left = pd.concat([standard_header, df_left_data], ignore_index=True)
+            
+            # --- SPLIT RIGHT (Cols 2, 3) ---
+            df_right_data = df.iloc[1:, [2, 3]].copy()
+            df_right_data.columns = [0, 1]
+            
+            df_right = pd.concat([standard_header, df_right_data], ignore_index=True)
+            
+            return [df_left, df_right]
+            
+        # If not split, return original as single item list
+        return [df]
 
-        # 2. The Heuristic: Name vs Value Length
-        # We assume strict structure: [Name, Val, Name, Val]
+    @staticmethod
+    def _is_demultiplexable(df):
+        """
+        Heuristic: Is this a 4-column table where Cols 0 & 2 are text (Names) 
+        and Cols 1 & 3 are short values (Results)?
+        """
+        # 1. dimensions Check
+        if df.shape[1] < 4:
+            return False
+
+        # 2. Length Heuristic
+        # We calculate avg length of NON-EMPTY strings in each column
         col_lengths = []
         for i in range(4):
-            # Calculate mean length of non-empty cells in this column
-            # We convert to string, strip, and measure
-            text_series = df.iloc[:, i].astype(str).str.strip()
-            # Filter out empty strings and 'nan'
-            valid_cells = text_series[text_series.str.len() > 0]
-            valid_cells = valid_cells[valid_cells != 'nan']
+            # Convert to string, strip whitespace
+            s = df.iloc[:, i].astype(str).str.strip()
+            # Ignore empty, 'nan', 'None'
+            mask = (s != '') & (s.str.lower() != 'nan') & (s.str.lower() != 'none')
+            valid_lens = s[mask].str.len()
             
-            if len(valid_cells) == 0:
+            if len(valid_lens) == 0:
                 col_lengths.append(0)
             else:
-                col_lengths.append(valid_cells.str.len().mean())
+                col_lengths.append(valid_lens.mean())
 
-        # Check the pattern: Long, Short, Long, Short
-        # We use a safety margin (e.g., Name must be 2x longer than Value on average)
-        # Values like 'R', 'S', '-' are len 1. Names are len 10+. Ratio is huge.
-        is_split_structure = (
-            (col_lengths[0] > col_lengths[1] * 1.5) and 
-            (col_lengths[2] > col_lengths[3] * 1.5)
-        )
-
-        if not is_split_structure:
-            return [df]
-
-        print("✂️  Detected Multi-Column Table. Demultiplexing...")
-
-        # 3. Perform the Split
-        # Left Table (Cols 0, 1)
-        df_left = df.iloc[:, [0, 1]].copy()
+        # Logic: 
+        # Col 0 (Name) should be significantly longer than Col 1 (Value)
+        # Col 2 (Name) should be significantly longer than Col 3 (Value)
+        # We use a 1.5x multiplier as a safe margin.
+        left_side_valid = col_lengths[0] > (col_lengths[1] * 1.5)
+        right_side_valid = col_lengths[2] > (col_lengths[3] * 1.5)
         
-        # Right Table (Cols 2, 3)
-        df_right = df.iloc[:, [2, 3]].copy()
+        # Also check that Name columns actually have content (avg len > 3)
+        names_have_content = col_lengths[0] > 3 and col_lengths[2] > 3
         
-        # Rename columns to standard 0, 1 for consistent processing downstream
-        df_right.columns = range(df_right.shape[1])
-
-        return [df_left, df_right]
+        return left_side_valid and right_side_valid and names_have_content

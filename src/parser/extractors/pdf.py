@@ -3,7 +3,7 @@ import pdfplumber
 from src.parser.utils.text_matching import is_fuzzy_match
 from src.parser.processors.table_handler import TableHandler
 from src.parser.processors.interpreter import Interpreter
-from src.config import NOISE_PATTERNS
+from src.config import NOISE_PATTERNS, LABEL_KEYWORDS, LABEL_NOISE_KEYWORDS
 
 class MedicalLabParser:
     def __init__(self, filepath):
@@ -32,9 +32,10 @@ class MedicalLabParser:
                 
                 tables = page.find_tables()
                 tables.sort(key=lambda t: t.bbox[1])
+                all_table_bboxes = [t.bbox for t in tables]
 
                 for i, table in enumerate(tables):
-                    label = self._find_header_above_table(table.bbox, text_lines)
+                    label = self._find_header_above_table(table.bbox, text_lines, exclusion_bboxes=all_table_bboxes)
                     
                     # LOGIC: New Label = New Context AND New Structure
                     if label:
@@ -89,53 +90,76 @@ class MedicalLabParser:
                 self.metadata['creation_date'] = f"{match.group(1)} {match.group(2)}"
                 # Don't break loop, we just grab the first one we see
 
-    def _find_header_above_table(self, table_bbox, text_lines):
+    def _find_header_above_table(self, table_bbox, text_lines, exclusion_bboxes=None):
         table_top = table_bbox[1]
-        
         candidates = []
         
         for line in text_lines:
             # 1. Spatial Check (Is it immediately above?)
+            # We look 100pts up.
             is_above = line['bottom'] < table_top and (table_top - line['bottom']) < 100
             if not is_above:
                 continue
 
+            # --- NEW: GEOMETRIC EXCLUSION ---
+            # If this text line is strictly inside ANY table's bbox, ignore it.
+            # This kills "РЕЗУЛЬТАТЫ" because it sits inside the Patient Info Table.
+            if exclusion_bboxes:
+                if self._is_inside_any_table(line, exclusion_bboxes):
+                    continue
+
             text = line['text'].strip()
             
-            # 2. Noise Check (Is it a printer artifact?)
+            # 2. Noise Check
             if self._is_noise(text):
                 continue
                 
-            candidates.append(line)
+            candidates.append(text)
         
         if not candidates:
             return None
 
+        best_candidate = None
+        best_score = -1
+
         for text in candidates:
+            print("\n" + "Text: ")
+            print(text + "\n")
+
             score = 0
-            upper_text = text.upper()
             
-            # Criterion 1: UPPERCASE (Strong signal)
-            if text.isupper() and len(text) > 5:
-                score += 50
+            # Criterion 1: UPPERCASE
+            if text.isupper() and len(text) > 5: score += 50
                 
             # Criterion 2: Keywords
-            if any(k in upper_text for k in LABEL_KEYWORDS):
-                score += 50
+            if any(k in text.lower() for k in LABEL_KEYWORDS): score += 50
                 
             # Criterion 3: Noise Penalty
-            if any(n in upper_text for n in LABEL_NOISE_KEYWORDS):
-                score -= 100
+            if any(n in text.lower() for n in LABEL_NOISE_KEYWORDS): score -= 100
             
-            # Criterion 4: Length (Too short is bad, too long is paragraph text)
+            # Criterion 4: Length Sanity
             if len(text) < 3: score -= 20
             if len(text) > 100: score -= 20
 
-            if score > best_score and score > 0:
+            if score >= best_score and score > 0:
                 best_score = score
                 best_candidate = text
+
+
+        return best_candidate.strip() if best_candidate else None
+
+    def _is_inside_any_table(self, line_obj, table_bboxes):
+        # Calculate center of the text line
+        line_x = (line_obj['x0'] + line_obj['x1']) / 2
+        line_y = (line_obj['top'] + line_obj['bottom']) / 2
+        
+        for bbox in table_bboxes:
+            b_x0, b_top, b_x1, b_bottom = bbox
             
-        return best_candidate.strip()
+            # Check if center is strictly inside
+            if (b_x0 < line_x < b_x1) and (b_top < line_y < b_bottom):
+                return True
+        return False
 
     def _is_noise(self, text):
         """Returns True if text matches any of our known noise patterns."""

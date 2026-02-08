@@ -81,41 +81,35 @@ HIDDEN_RESULT_KEYWORDS = ["посеве обнаружено", "рост мик�
 # - Coagulation/Express Tests (Мовлонова)
 
 LABEL_KEYWORDS = [
-    # --- Existing ---
-    "ЧУВСТВИТЕЛЬНОСТЬ", "АНТИБИОТИК", "SENSITIVITY", "ANTIBIOTIC", 
-    "ANALYSIS", "RESULT", "РЕЗУЛЬТАТЫ", "ИССЛЕДОВАНИЯ",
+    "чувствительность", "антибиотик", "sensitivity", "antibiotic", 
+    "analysis", "result", "результаты", "исследования",
     
-    # --- General Categories ---
-    "ОБЩИЙ", "КРОВИ", "ОАК", "BLOOD", "CBC",  # General Blood [cite: 20]
-    "БИОХИМИЯ", "BIOCHEMISTRY",               # Biochemistry [cite: 27]
-    "ЛИПИДНЫЙ", "СПЕКТР", "LIPID",            # Lipids [cite: 29]
-    "УГЛЕВОДНЫЙ", "ОБМЕН", "CARBOHYDRATE",    # Carbs/Glucose [cite: 36]
-    "ГОРМОНАЛЬНЫЕ", "ГОРМОН", "HORMONAL",     # Hormones [cite: 38]
-    "МОЧИ", "ОАМ", "URINE",                   # Urine [cite: 40]
-    "КОАГУЛОГРАММА", "СВЕРТЫВАНИЯ", "COAGULATION", "HEMOSTASIS", # Coagulation 
-    "ВИТАМИНЫ", "VITAMINS",                   # Vitamins [cite: 49]
-    "ЭКСПРЕСС", "ТЕСТ", "EXPRESS", "TEST",    # Rapid Tests [cite: 86]
-    "МАРКЕР", "MARKER"                        # Common in other lab types
+    "общий", "крови", "оак", "blood", "cbc",  
+    "биохимия", "biochemistry",               
+    "липидный", "спектр", "lipid",            
+    "углеводный", "обмен", "carbohydrate",    
+    "гормональные", "гормон", "hormonal",     
+    "мочи", "оам", "urine",                   
+    "коагулограмма", "свертывания", "coagulation", "hemostasis", 
+    "витамины", "vitamins",                   
+    "экспресс", "тест", "express", "test",    
+    "маркер", "marker"                        
 ]
 
 LABEL_NOISE_KEYWORDS = [
-    # --- Standards & Versions ---
     "версия", "version", "eucast", 
     "комитет", "committee", 
     "год", "года", "year",
 
-    # --- Printer & System Artifacts ---
-    "print", "page", "страница", "лист",      # [cite: 15, 25]
-    "192.168", "http", "www", ".uz",          # IP/URL [cite: 22, 19]
+    "print", "page", "страница",      
+    "192.168", "http", "www", ".uz",          
     
-    # --- Lab Metadata (Header/Footer noise) ---
-    "heartteam", "laboratories", "clinic",    # Lab Names 
-    "узбекистан", "ташкент", "город",         # Address [cite: 18]
-    "ферганский", "шоссе", "ул.", "street",   # Address [cite: 19]
-    "тел:", "tel:", "факс", "phone",          # Contacts [cite: 19]
+    "heartteam", "laboratories", "clinic",    
+    "узбекистан", "ташкент", "город",         
+    "ферганский", "шоссе", "ул.", "street",
+    "тел:", "tel:", "факс", "phone", 
     
-    # --- Staff / Signatures ---
-    "врач", "doctor", "проводил", "анализ"    # [cite: 51]
+    "врач", "doctor", "проводил"    
 ]
 
 ANTIBIOTIC_STUDY_KEYWORDS = ["антибиотик", "antibiotic", "eucast"]

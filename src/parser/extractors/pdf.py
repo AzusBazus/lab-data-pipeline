@@ -110,8 +110,32 @@ class MedicalLabParser:
         
         if not candidates:
             return None
+
+        for text in candidates:
+            score = 0
+            upper_text = text.upper()
             
-        return candidates[-1]['text'].strip()
+            # Criterion 1: UPPERCASE (Strong signal)
+            if text.isupper() and len(text) > 5:
+                score += 50
+                
+            # Criterion 2: Keywords
+            if any(k in upper_text for k in LABEL_KEYWORDS):
+                score += 50
+                
+            # Criterion 3: Noise Penalty
+            if any(n in upper_text for n in LABEL_NOISE_KEYWORDS):
+                score -= 100
+            
+            # Criterion 4: Length (Too short is bad, too long is paragraph text)
+            if len(text) < 3: score -= 20
+            if len(text) > 100: score -= 20
+
+            if score > best_score and score > 0:
+                best_score = score
+                best_candidate = text
+            
+        return best_candidate.strip()
 
     def _is_noise(self, text):
         """Returns True if text matches any of our known noise patterns."""

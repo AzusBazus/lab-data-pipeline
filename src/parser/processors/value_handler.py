@@ -142,3 +142,28 @@ class ValueHandler:
                 row['value'] = None
 
         return rows
+
+    @staticmethod
+    def clean_antibiotic_name(text):
+        """
+        Normalizes antibiotic names from the 'EUCAST' table.
+        Input: "Пенициллины: 1) Бензилпенициллин" -> Output: "Бензилпенициллин"
+        Input: "2) Пиперациллин / Тазобактам"      -> Output: "Пиперациллин / Тазобактам"
+        Input: "5) Цефуроксим в/в"                 -> Output: "Цефуроксим в/в"
+        """
+        if not text: return None
+        
+        # 1. Remove Category Prefix (e.g., "Пенициллины:")
+        # We split by ':' and take the last part. 
+        # If no colon, it returns the original string.
+        if ':' in text:
+            text = text.split(':')[-1]
+
+        # 2. Remove Numbering (e.g., "1) ", "22) ")
+        # Matches start of string, digits, closing paren, optional space
+        text = re.sub(r'^\s*\d+\)\s*', '', text)
+
+        # 3. Clean whitespace
+        text = text.strip()
+        
+        return text

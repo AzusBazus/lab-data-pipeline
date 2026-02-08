@@ -48,6 +48,11 @@ class Interpreter:
                 "norm":      get_col('norm'),
                 "unit":      get_col('unit'),
             }
+
+            is_antibiotic_table = any(k in str(context).lower() for k in ANTIBIOTIC_STUDY_KEYWORDS)
+            
+            if is_antibiotic_table and clean_row['test_name']:
+                clean_row['test_name'] = ValueHandler.clean_antibiotic_name(clean_row['test_name'])
             
             if clean_row['test_name'] and clean_row['value']:
                 extracted_rows.append(clean_row)

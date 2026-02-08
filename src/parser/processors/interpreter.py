@@ -49,7 +49,7 @@ class Interpreter:
                 "unit":      get_col('unit'),
             }
 
-            is_antibiotic_table = "антибиотик" in str(context).lower() or "EUCAST" in str(context)
+            is_antibiotic_table = any(k in str(context).lower() for k in ANTIBIOTIC_STUDY_KEYWORDS)
             
             if is_antibiotic_table and clean_row['test_name']:
                 clean_row['test_name'] = ValueHandler.clean_antibiotic_name(clean_row['test_name'])

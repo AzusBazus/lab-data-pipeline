@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from src.config import COLUMN_KEYWORDS
+from src.parser.utils.text_matching import is_fuzzy_match
 
 class TableHandler:
     
@@ -193,41 +194,78 @@ class TableHandler:
     @staticmethod
     def demultiplex(df):
         """
-        Detects 'Double-Wide' tables (Name, Value, Name, Value) and splits them 
-        into two standard tables (Name, Value).
-        
-        Also injects standardized headers so the Interpreter maps them instantly.
+        1. Splits Double-Wide tables (Left/Right).
+        2. Splits Vertically Stacked tables (Top/Bottom).
+        Returns a list of clean DataFrames.
         """
-        if df is None or df.empty:
-            return []
-            
-        # 1. Check if we need to split
+        if df is None or df.empty: return []
+        
+        initial_tables = [df]
+
+        # --- STEP 1: LEFT/RIGHT SPLIT ---
         if TableHandler._is_demultiplexable(df):
-            print("✂️  Detected Multi-Column Table. Demultiplexing...")
-            
-            # Create Standard Header Row
-            # We use Russian keywords that we KNOW your config catches
-            # ['Наименование', 'Результат']
+            print("✂️  Detected Multi-Column Table. Splitting Left/Right...")
             standard_header = pd.DataFrame([['Наименование', 'Результат']], columns=[0, 1])
             
-            # --- SPLIT LEFT (Cols 0, 1) ---
-            # We skip the original header (row 0) because it's usually merged/messy
+            # Left
             df_left_data = df.iloc[1:, [0, 1]].copy()
-            df_left_data.columns = [0, 1] # Reset columns to match header
-            
-            # Concatenate: [Standard Header] + [Data]
+            df_left_data.columns = [0, 1]
             df_left = pd.concat([standard_header, df_left_data], ignore_index=True)
             
-            # --- SPLIT RIGHT (Cols 2, 3) ---
+            # Right
             df_right_data = df.iloc[1:, [2, 3]].copy()
             df_right_data.columns = [0, 1]
-            
             df_right = pd.concat([standard_header, df_right_data], ignore_index=True)
             
-            return [df_left, df_right]
+            initial_tables = [df_left, df_right]
+
+        # --- STEP 2: TOP/BOTTOM SPLIT ---
+        final_tables = []
+        for table in initial_tables:
+            # Check for "Stacked" tables inside this one
+            split_subtables = TableHandler._split_stacked_tables(table)
+            final_tables.extend(split_subtables)
             
-        # If not split, return original as single item list
-        return [df]
+        return final_tables
+
+    @staticmethod
+    def _split_stacked_tables(df):
+        """
+        Scans for rows where Col 0 == Col 1 (Section Headers).
+        Splits the DataFrame at these rows.
+        """
+        if df.shape[1] < 2: return [df]
+        
+        split_indices = []
+        
+        # Iterate rows (skipping header row 0)
+        for idx in range(1, len(df)):
+            val0 = str(df.iloc[idx, 0]).strip()
+            val1 = str(df.iloc[idx, 1]).strip()
+            
+            # Check for identical text (Header detected)
+            # Filter out empty rows or short noise
+            if len(val0) > 5 and is_fuzzy_match(val0, val1, threshold=95):
+                split_indices.append(idx)
+
+        if not split_indices:
+            return [df]
+
+        print(f"🔪 Detected Stacked Table. Splitting at rows: {split_indices}")
+        
+        subtables = []
+        start_idx = 0
+        
+        # Add the splits
+        for split_idx in split_indices:
+            subtables.append(df.iloc[start_idx : split_idx].copy())
+            
+            start_idx = split_idx
+            
+        # Add the final chunk
+        subtables.append(df.iloc[start_idx+1:].copy())
+        
+        return subtables
 
     @staticmethod
     def _is_demultiplexable(df):

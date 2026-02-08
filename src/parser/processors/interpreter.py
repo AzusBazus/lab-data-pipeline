@@ -1,6 +1,6 @@
 import re
 import pandas as pd
-from src.config import COLUMN_KEYWORDS, PATIENT_FIELDS, DATE_PATTERN, YEAR_PATTERN, HIDDEN_RESULT_KEYWORDS
+from src.config import COLUMN_KEYWORDS, PATIENT_FIELDS, DATE_PATTERN, YEAR_PATTERN, HIDDEN_RESULT_KEYWORDS, ANTIBIOTIC_STUDY_KEYWORDS
 from src.parser.utils.text_matching import is_fuzzy_match
 from src.parser.processors.value_handler import ValueHandler
 

@@ -28,6 +28,11 @@ class DocxMedicalParser:
         # Buffer to hold recent paragraphs (candidates for labels)
         recent_paragraphs = []
 
+        patient_info, extra_results = Interpreter.extract_patient_info(self._get_all_tables_as_grids(document))
+        
+        if extra_results:
+            all_results.extend(extra_results)
+
         # ITERATE THROUGH DOCUMENT BODY (Order matters!)
         for element in document.element.body:
             
@@ -87,14 +92,6 @@ class DocxMedicalParser:
 
                     all_results.extend(extracted_rows)
 
-        # Separate Patient Info extraction (could be done via a pre-scan or integrated above)
-        # For simplicity, let's do a quick pre-scan for patient info using the existing method
-        # logic if needed, or rely on the fact that Interpreter.extract_patient_info 
-        # is robust enough to run on raw_tables list if we collected them.
-        
-        # (Re-opening simply to get patient info from the whole doc structure is safer 
-        # if we want to reuse the existing `extract_patient_info` logic exactly)
-        patient_info, _ = Interpreter.extract_patient_info(self._get_all_tables_as_grids(document))
         
         return patient_info, all_results
 

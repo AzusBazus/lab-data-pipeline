@@ -27,3 +27,16 @@ data/archive/*
 # Mac/Windows clutter
 .DS_Store
 Thumbs.db
+
+# AI & ML Specific
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+/models/
+/datasets/
+/wandb/
+
+# Label Studio
+/my_label_studio_project/

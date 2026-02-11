@@ -38,7 +38,8 @@ Thumbs.db
 /datasets/
 /wandb/
 
-/model_cache/test_table.png
+src/ai_playground/model_cache/*
+src/ai_playground/test_table.png
 
 # Label Studio
 /my_label_studio_project/

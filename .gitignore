@@ -39,7 +39,10 @@ Thumbs.db
 /wandb/
 
 src/ai_playground/model_cache/*
+src/ai_playground/dataset_processed/*
+src/ai_playground/archive/*
 src/ai_playground/test_table.png
+src/ai_playground/export.json
 
 # Label Studio
 /my_label_studio_project/

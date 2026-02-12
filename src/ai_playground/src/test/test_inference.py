@@ -4,13 +4,7 @@ import torch
 from PIL import Image, ImageDraw, ImageFont
 from transformers import LayoutLMv3ForTokenClassification, LayoutLMv3Processor
 
-# --- CONFIGURATION ---
-MODEL_PATH = "src/ai_playground/model_output/final" # Load YOUR trained model
-IMAGE_DIR = "src/ai_playground/archive"
-CONFIDENCE_THRESHOLD = 0.5 # Only show boxes with >50% confidence
-
-# Define colors for your labels for easy visualization
-COLORS = {
+LABEL_COLORS = {
     "Table_Context": "darkblue",
     "Section_Header": "red",
     "Test_Name": "green",
@@ -20,11 +14,17 @@ COLORS = {
     "Patient_ID": "grey"
 }
 
+V1_MODEL_ID = "./src/ai_playground/models/custom_v1/final"
+
+IMAGE_DIR = "src/ai_playground/data/images"
+
+CONFIDENCE_THRESHOLD = 0.5 # Only show boxes with >50% confidence
+
 def main():
     # 1. Load Model & Processor
-    print(f"⏳ Loading model from {MODEL_PATH}...")
+    print(f"⏳ Loading model from {V1_MODEL_ID}...")
     try:
-        model = LayoutLMv3ForTokenClassification.from_pretrained(MODEL_PATH)
+        model = LayoutLMv3ForTokenClassification.from_pretrained(V1_MODEL_ID)
         # Use the base processor (it handles image resizing/OCR)
         processor = LayoutLMv3Processor.from_pretrained("microsoft/layoutlmv3-base")
     except Exception as e:
@@ -94,7 +94,7 @@ def main():
         # Draw Box
         # Strip "B-" or "I-" to get the core name for color lookup
         core_label = label.replace("B-", "").replace("I-", "")
-        color = COLORS.get(core_label, "black")
+        color = LABEL_COLORS.get(core_label, "black")
         
         draw.rectangle(unnorm_box, outline=color, width=2)
         draw.text((unnorm_box[0], unnorm_box[1] - 10), f"{label} ({prob:.2f})", fill=color)

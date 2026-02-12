@@ -1,24 +1,8 @@
 from transformers import LayoutLMv3ForTokenClassification, TrainingArguments, Trainer
 from datasets import load_from_disk
 import torch
+from src.config import DATASET_PATH, MODELS_DIR, BASE_MODEL_ID, LABELS
 
-# --- CONFIGURATION ---
-DATASET_PATH = "src/ai_playground/dataset_processed"
-OUTPUT_DIR = "src/ai_playground/model_output"
-MODEL_ID = "./src/ai_playground/model_cache"
-LABELS = [
-    "O", 
-    "B-Section_Header", "I-Section_Header",
-    "B-Test_Context_Name", "I-Test_Context_Name",
-    "B-Test_Name", "I-Test_Name",
-    "B-Test_Value", "I-Test_Value",
-    "B-Test_Unit", "I-Test_Unit",
-    "B-Test_Norm", "I-Test_Norm",
-    "B-Patient_Name", "I-Patient_Name",
-    "B-Patient_DOB", "I-Patient_DOB",
-    "B-Patient_Weight", "I-Patient_Weight",
-    "B-Patient_Height", "I-Patient_Height",
-]
 id2label = {k: v for k, v in enumerate(LABELS)}
 label2id = {v: k for k, v in enumerate(LABELS)}
 
@@ -32,13 +16,13 @@ def main():
     print(f"🏋️‍♀️ Training on {len(dataset['train'])} examples...")
 
     model = LayoutLMv3ForTokenClassification.from_pretrained(
-        MODEL_ID,
+        BASE_MODEL_ID,
         id2label=id2label,
         label2id=label2id
     )
 
     args = TrainingArguments(
-        output_dir=OUTPUT_DIR,
+        output_dir=MODELS_DIR,
         max_steps=200,                # Short run for testing
         per_device_train_batch_size=2, # Keep small for CPU/MPS
         learning_rate=5e-5,
@@ -61,7 +45,7 @@ def main():
     trainer.train()
     
     # Save final model
-    trainer.save_model(OUTPUT_DIR + "/final")
+    trainer.save_model(MODELS_DIR + "/final")
     print("✅ Training Complete! Model saved.")
 
 if __name__ == "__main__":

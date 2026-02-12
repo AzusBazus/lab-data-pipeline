@@ -6,29 +6,8 @@ from PIL import Image
 from transformers import LayoutLMv3Processor
 from datasets import Dataset, Features, Sequence, ClassLabel, Value, Array2D, Array3D
 import numpy as np
+from src.config import JSON_MIN_PATH, IMAGE_DIR, DATASET_PATH, BASE_MODEL_ID, LABELS
 
-# --- CONFIGURATION ---
-JSON_PATH = "src/ai_playground/export.json"
-IMAGE_DIR = "src/ai_playground/archive" # Where your actual .png files are
-OUTPUT_PATH = "src/ai_playground/dataset_processed"
-MODEL_ID = "./src/ai_playground/model_cache" 
-
-
-# Define your Label Map (MUST MATCH YOUR XML EXACTLY)
-# "O" means "Outside" (background text)
-LABELS = [
-    "O", 
-    "B-Section_Header", "I-Section_Header",
-    "B-Test_Context_Name", "I-Test_Context_Name",
-    "B-Test_Name", "I-Test_Name",
-    "B-Test_Value", "I-Test_Value",
-    "B-Test_Unit", "I-Test_Unit",
-    "B-Test_Norm", "I-Test_Norm",
-    "B-Patient_Name", "I-Patient_Name",
-    "B-Patient_DOB", "I-Patient_DOB",
-    "B-Patient_Weight", "I-Patient_Weight",
-    "B-Patient_Height", "I-Patient_Height",
-]
 id2label = {k: v for k, v in enumerate(LABELS)}
 label2id = {v: k for k, v in enumerate(LABELS)}
 
@@ -72,11 +51,11 @@ def smart_find_file(json_image_path, local_image_dir):
     return None
 
 def generate_examples():
-    with open(JSON_PATH, "r") as f:
+    with open(JSON_MIN_PATH, "r") as f:
         data = json.load(f)
 
     # Load processor (handles OCR automatically)
-    processor = LayoutLMv3Processor.from_pretrained(MODEL_ID)
+    processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_ID)
 
     for item in data:
         # 1. Load Image
@@ -194,7 +173,7 @@ features = Features({
 
 # Build Dataset
 ds = Dataset.from_generator(gen, features=features)
-ds.save_to_disk(OUTPUT_PATH)
+ds.save_to_disk(DATASET_PATH)
 
-print(f"✅ Dataset processed and saved to {OUTPUT_PATH}")
+print(f"✅ Dataset processed and saved to {DATASET_PATH}")
 print(f"📊 Total Samples: {len(ds)}")

@@ -6,28 +6,32 @@ from PIL import Image
 from transformers import LayoutLMv3Processor
 from datasets import Dataset, Features, Sequence, ClassLabel, Value, Array2D, Array3D
 import numpy as np
-from src.config import JSON_MIN_PATH, IMAGE_DIR, DATASET_PATH, BASE_MODEL_ID, LABELS
+from collections import defaultdict 
+
+JSON_MIN_PATH = "src/ai_playground/data/export.json"
+
+IMAGE_DIR = "src/ai_playground/data/images"
+
+DATASET_PATH = "src/ai_playground/data/dataset_processed"
+
+BASE_MODEL_ID = "./src/ai_playground/models/base_model" 
+
+LABELS = [
+    "O", 
+    "B-Section_Header", "I-Section_Header",
+    "B-Test_Context_Name", "I-Test_Context_Name",
+    "B-Test_Name", "I-Test_Name",
+    "B-Test_Value", "I-Test_Value",
+    "B-Test_Unit", "I-Test_Unit",
+    "B-Test_Norm", "I-Test_Norm",
+    "B-Patient_Name", "I-Patient_Name",
+    "B-Patient_DOB", "I-Patient_DOB",
+    "B-Patient_Weight", "I-Patient_Weight",
+    "B-Patient_Height", "I-Patient_Height",
+]
 
 id2label = {k: v for k, v in enumerate(LABELS)}
 label2id = {v: k for k, v in enumerate(LABELS)}
-
-def normalize_box(box, width, height):
-    return [
-        int(1000 * (box[0] / width)),
-        int(1000 * (box[1] / height)),
-        int(1000 * (box[2] / width)),
-        int(1000 * (box[3] / height)),
-    ]
-
-def iou(boxA, boxB):
-    # Calculate Intersection over Union to find which box a word belongs to
-    xA = max(boxA[0], boxB[0])
-    yA = max(boxA[1], boxB[1])
-    xB = min(boxA[2], boxB[2])
-    yB = min(boxA[3], boxB[3])
-    interArea = max(0, xB - xA) * max(0, yB - yA)
-    boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
-    return interArea / float(boxAArea + 1e-5)
 
 def smart_find_file(json_image_path, local_image_dir):
     """
@@ -50,100 +54,131 @@ def smart_find_file(json_image_path, local_image_dir):
             
     return None
 
+def is_inside(center, box):
+    # Check if a point (x,y) is inside a box [x1, y1, x2, y2]
+    x, y = center
+    return box[0] <= x <= box[2] and box[1] <= y <= box[3]
+
 def generate_examples():
+    print(f"📂 Loading annotations from: {JSON_MIN_PATH}")
     with open(JSON_MIN_PATH, "r") as f:
         data = json.load(f)
 
-    # Load processor (handles OCR automatically)
     processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_ID)
+    
+    total_files = 0
+    total_valid_samples = 0
 
-    for item in data:
-        # 1. Load Image
-        # Label studio usually stores filename like "/data/upload/filename.png"
-        # We need to extract just the filename
+    for item_idx, item in enumerate(data):
         filename = Path(item['image']).name
         image_path = smart_find_file(item['image'], IMAGE_DIR)
         
-        if not image_path.exists():
-            print(f"⚠️ Image not found: {image_path}, skipping...")
+        if not image_path or not image_path.exists():
+            print(f"⚠️  [File {item_idx}] Image not found: {filename}")
             continue
 
         image = Image.open(image_path).convert("RGB")
         width, height = image.size
 
-        # 2. Get User Labels (The Ground Truth)
+        # --- 1. LOAD & SORT USER BOXES (The Fix) ---
         user_boxes = []
         user_labels = []
         
         if 'label' in item:
+            # First, extract all raw boxes
+            temp_boxes = []
             for annotation in item['label']:
-                # Label Studio uses 0-100 percentages. Convert to pixels.
                 x = annotation['x'] / 100 * width
                 y = annotation['y'] / 100 * height
                 w = annotation['width'] / 100 * width
                 h = annotation['height'] / 100 * height
                 
-                # Convert to [x1, y1, x2, y2]
+                # Store Area for sorting
+                area = w * h
                 box = [x, y, x + w, y + h]
                 label_name = annotation['rectanglelabels'][0]
                 
-                user_boxes.append(box)
-                user_labels.append(label_name)
+                temp_boxes.append({"box": box, "label": label_name, "area": area})
+            
+            # SORT: Smallest Area First! 
+            # This prevents a big "Table" box from stealing the label from a small "Value" box.
+            temp_boxes.sort(key=lambda x: x["area"])
+            
+            for t in temp_boxes:
+                user_boxes.append(t["box"])
+                user_labels.append(t["label"])
 
-        # 3. Run OCR to get words (Tokens)
-        encoding = processor(
-            image, 
-            return_offsets_mapping=True, 
-            truncation=True, 
-            max_length=512, 
-            padding="max_length", # <--- FORCE PADDING TO 512
-            return_tensors="pt"   # Get PyTorch tensors
-        )
-        offset_mapping = encoding.offset_mapping
+        # --- 2. RUN OCR ---
+        try:
+            encoding = processor(
+                image, 
+                return_offsets_mapping=True, 
+                truncation=True, 
+                max_length=512, 
+                padding="max_length", 
+                return_tensors="pt"
+            )
+        except Exception as e:
+            print(f"❌ [File {filename}] OCR Failed: {e}")
+            continue
+
         ocr_boxes_1000 = encoding.bbox[0]
-
-        token_labels = []        
+        token_labels = []
         
+        # LOGGING COUNTER
+        stats = defaultdict(int)
+
         for i, ocr_box in enumerate(ocr_boxes_1000):
-            # Skip special tokens (CLS, SEP) which have [0,0,0,0] box
-            if ocr_box == [0, 0, 0, 0]:
+            if ocr_box.tolist() == [0, 0, 0, 0]:
                 token_labels.append(label2id["O"])
                 continue
 
-            # Convert 1000-scale back to pixel scale for comparison
-            ocr_box_pixels = [
-                ocr_box[0] * width / 1000,
-                ocr_box[1] * height / 1000,
-                ocr_box[2] * width / 1000,
-                ocr_box[3] * height / 1000,
-            ]
+            x1 = ocr_box[0] * width / 1000
+            y1 = ocr_box[1] * height / 1000
+            x2 = ocr_box[2] * width / 1000
+            y2 = ocr_box[3] * height / 1000
+            
+            center_x = x1 + (x2 - x1) / 2
+            center_y = y1 + (y2 - y1) / 2
 
-            # Find best matching user box
-            best_iou = 0
             best_label = "O"
             
+            # Check user boxes (Now sorted small -> large)
             for u_box, u_label in zip(user_boxes, user_labels):
-                score = iou(ocr_box_pixels, u_box)
-                if score > 0.5: # If word is >50% inside the box
-                    best_iou = score
+                if is_inside((center_x, center_y), u_box):
                     best_label = u_label
-            
-            # BIO Tagging Logic (Beginning / Inside)
-            # Simplified: We just use 'B-' for now for everything to be safe, 
-            # or map B/I if you want strict sequence logic.
-            # Let's simple-map everything to "B-" for the first token of a word, 
-            # but since we are iterating tokens, simpler is just Direct Mapping.
-            
+                    break 
+
+            # BIO Logic
             final_tag = "O"
             if best_label != "O":
-                final_tag = f"B-{best_label}" # Simplified approach
+                if i > 0 and token_labels[-1] in [label2id[f"B-{best_label}"], label2id[f"I-{best_label}"]]:
+                     final_tag = f"I-{best_label}"
+                else:
+                     final_tag = f"B-{best_label}"
+                
+                # Count it for the logs
+                stats[best_label] += 1
                 
             token_labels.append(label2id[final_tag])
 
+        # --- 3. PRINT REPORT ---
+        # Only print if we found meaningful labels to avoid spam
+        if sum(stats.values()) > 0:
+            print(f"✅ {image_path} | Found: ", end="")
+            # Format: Name: 12, Value: 5, Unit: 5
+            log_str = ", ".join([f"{k}: {v}" for k, v in stats.items()])
+            print(log_str, "\n")
+        else:
+            print(f"⚠️  {image_path} | NO LABELS MATCHED (Check Box Alignment!)")
+
+        # Padding logic...
         if len(token_labels) < 512:
             token_labels += [label2id["O"]] * (512 - len(token_labels))
         else:
             token_labels = token_labels[:512]
+
+        total_valid_samples += 1
 
         yield {
             "id": filename,
@@ -153,6 +188,9 @@ def generate_examples():
             "pixel_values": encoding.pixel_values[0].tolist(),
             "labels": token_labels
         }
+    
+    print(f"\n📊 Summary: Processed {total_valid_samples} valid images.")
+
 
 # --- MAIN EXECUTION ---
 print("🚀 Parsing Label Studio Data...")

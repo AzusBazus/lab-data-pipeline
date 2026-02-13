@@ -1,7 +1,26 @@
 from transformers import LayoutLMv3ForTokenClassification, TrainingArguments, Trainer
 from datasets import load_from_disk
 import torch
-from src.config import DATASET_PATH, MODELS_DIR, BASE_MODEL_ID, LABELS
+
+DATASET_PATH = "src/ai_playground/data/dataset_processed"
+
+BASE_MODEL_ID = "./src/ai_playground/models/base_model" 
+
+MODELS_DIR = "./src/ai_playground/models/custom_v2"
+
+LABELS = [
+    "O", 
+    "B-Section_Header", "I-Section_Header",
+    "B-Test_Context_Name", "I-Test_Context_Name",
+    "B-Test_Name", "I-Test_Name",
+    "B-Test_Value", "I-Test_Value",
+    "B-Test_Unit", "I-Test_Unit",
+    "B-Test_Norm", "I-Test_Norm",
+    "B-Patient_Name", "I-Patient_Name",
+    "B-Patient_DOB", "I-Patient_DOB",
+    "B-Patient_Weight", "I-Patient_Weight",
+    "B-Patient_Height", "I-Patient_Height",
+]
 
 id2label = {k: v for k, v in enumerate(LABELS)}
 label2id = {v: k for k, v in enumerate(LABELS)}

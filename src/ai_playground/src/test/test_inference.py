@@ -14,11 +14,13 @@ LABEL_COLORS = {
     "Patient_ID": "grey"
 }
 
-V1_MODEL_ID = "./src/ai_playground/models/custom_v1/final"
+BASE_MODEL_ID = "./src/ai_playground/models/base_model"
+
+V1_MODEL_ID = "./src/ai_playground/models/custom_v2/final"
 
 IMAGE_DIR = "src/ai_playground/data/images"
 
-CONFIDENCE_THRESHOLD = 0.5 # Only show boxes with >50% confidence
+CONFIDENCE_THRESHOLD = 0.50 # Only show boxes with >50% confidence
 
 def main():
     # 1. Load Model & Processor
@@ -26,7 +28,7 @@ def main():
     try:
         model = LayoutLMv3ForTokenClassification.from_pretrained(V1_MODEL_ID)
         # Use the base processor (it handles image resizing/OCR)
-        processor = LayoutLMv3Processor.from_pretrained("microsoft/layoutlmv3-base")
+        processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_ID)
     except Exception as e:
         print(f"❌ Error loading model: {e}")
         return

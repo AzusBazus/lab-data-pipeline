@@ -4,7 +4,7 @@ from pathlib import Path
 from urllib.parse import unquote
 from PIL import Image
 from transformers import LayoutLMv3Processor
-from datasets import Dataset, Features, Sequence, ClassLabel, Value, Array2D, Array3D
+from datasets import Dataset, Features, Sequence, ClassLabel, Value, Array2D, Array3D, DownloadMode
 import numpy as np
 from collections import defaultdict 
 
@@ -59,9 +59,9 @@ def is_inside(center, box):
     x, y = center
     return box[0] <= x <= box[2] and box[1] <= y <= box[3]
 
-def generate_examples():
-    print(f"📂 Loading annotations from: {JSON_MIN_PATH}")
-    with open(JSON_MIN_PATH, "r") as f:
+def generate_examples(json_path=JSON_MIN_PATH):
+    print(f"📂 Loading annotations from: {json_path}")
+    with open(json_path, "r") as f:
         data = json.load(f)
 
     processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_ID)
@@ -196,8 +196,8 @@ def generate_examples():
 print("🚀 Parsing Label Studio Data...")
 
 # Create Generator
-def gen():
-    return generate_examples()
+def gen(json_path=JSON_MIN_PATH):
+    return generate_examples(json_path)
 
 # Define Schema
 features = Features({
@@ -210,7 +210,7 @@ features = Features({
 })
 
 # Build Dataset
-ds = Dataset.from_generator(gen, features=features)
+ds = Dataset.from_generator(gen, gen_kwargs={"json_path": JSON_MIN_PATH}, features=features)
 ds.save_to_disk(DATASET_PATH)
 
 print(f"✅ Dataset processed and saved to {DATASET_PATH}")

@@ -6,7 +6,7 @@ DATASET_PATH = "src/ai_playground/data/dataset_processed"
 
 BASE_MODEL_ID = "./src/ai_playground/models/base_model" 
 
-MODELS_DIR = "./src/ai_playground/models/custom_v2"
+MODEL_DIR = "./src/ai_playground/models/custom_v2"
 
 LABELS = [
     "O", 
@@ -41,7 +41,7 @@ def main():
     )
 
     args = TrainingArguments(
-        output_dir=MODELS_DIR,
+        output_dir=MODEL_DIR,
         max_steps=200,                # Short run for testing
         per_device_train_batch_size=2, # Keep small for CPU/MPS
         learning_rate=5e-5,
@@ -64,7 +64,7 @@ def main():
     trainer.train()
     
     # Save final model
-    trainer.save_model(MODELS_DIR + "/final")
+    trainer.save_model(MODEL_DIR + "/final")
     print("✅ Training Complete! Model saved.")
 
 if __name__ == "__main__":

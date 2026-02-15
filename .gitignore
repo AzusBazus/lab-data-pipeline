@@ -38,13 +38,13 @@ Thumbs.db
 /datasets/
 /wandb/
 
-src/ai_playground/data/*
+src/data/*
 
-src/ai_playground/models/*
+src/models/*
 
-src/ai_playground/test_table.png
-src/ai_playground/export.json
-src/ai_playground/model_output/
+src/test_table.png
+src/export.json
+src/model_output/
 
 # Label Studio
 /my_label_studio_project/

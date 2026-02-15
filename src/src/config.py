@@ -1,14 +1,14 @@
-JSON_MIN_PATH = "src/ai_playground/data/export.json"
+JSON_MIN_PATH = "src/data/export.json"
 
-IMAGE_DIR = "src/ai_playground/data/images"
+IMAGE_DIR = "src/data/images"
 
-DATASET_PATH = "src/ai_playground/data/dataset_processed"
+DATASET_PATH = "src/data/dataset_processed"
 
-BASE_MODEL_ID = "./src/ai_playground/models/base_model" 
+BASE_MODEL_ID = "./src/models/base_model" 
 
-V1_MODEL_ID = "./src/ai_playground/models/custom_v1/final"
+V1_MODEL_ID = "./src/models/custom_v1/final"
 
-MODELS_DIR = "./src/ai_playground/models"
+MODELS_DIR = "./src/models"
 
 LABELS = [
     "O", 

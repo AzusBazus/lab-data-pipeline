@@ -2,7 +2,7 @@ import requests
 import json
 
 # --- CONFIG ---
-from config import LABEL_STUDIO_URL, PROJECT_ID, SESSION_ID
+from src.config import LABEL_STUDIO_URL, PROJECT_ID, SESSION_ID, TASKS_JSON_PATH
 
 def main():
     print(f"⏳ Connecting to Project {PROJECT_ID} via Session Cookie...")
@@ -33,7 +33,7 @@ def main():
         print(f"✅ Success! Downloaded {len(data)} tasks.")
         
         # Save file
-        with open("data/project_tasks.json", "w") as f:
+        with open(TASKS_JSON_PATH, "w") as f:
             json.dump(data, f, indent=2)
             
     except Exception as e:

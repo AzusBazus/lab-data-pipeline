@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from PIL import Image
 from transformers import LayoutLMv3ForTokenClassification, LayoutLMv3Processor
-from config import  JSON_MIN_PATH, IMAGES_PATH, MODEL_PATH, BASE_MODEL_PATH
+from src.config import  JSON_MIN_PATH, IMAGES_PATH, MODEL_PATH, BASE_MODEL_PATH
 
 BATCH_SIZE = 20
 OUTPUT_DIR = "./data/batch_upload"
@@ -136,7 +136,7 @@ def main():
     print(f"🚀 Preparing Batch of {current_batch_size} images...")
     
     # 4. Load Model for Pre-Labeling
-    model = LayoutLMv3ForTokenClassification.from_pretrained(MODEL_PATH)
+    model = LayoutLMv3ForTokenClassification.from_pretrained(MODEL_PATH + "/final")
     processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_PATH)
     id2label = model.config.id2label
 
@@ -154,9 +154,6 @@ def main():
         inputs = processor(image, return_tensors="pt", truncation=True, max_length=512)
         with torch.no_grad():
             outputs = model(**inputs)
-            
-        # ... (Insert your pixel_to_percent and merge_boxes logic here from previous message) ...
-        # For now, let's assume you have the `final_detections` list from the previous script
         
         # Placeholder logic to ensure script runs:
         # You MUST paste the `merge_boxes` and `pixel_to_percent` functions here!
@@ -176,18 +173,26 @@ def main():
             ])
             labels.append(id2label[pred_id])
 
-        # Merge for UI
-        final_detections = merge_boxes_bio(pixel_boxes, labels, probs)
+        # 2. Merge Tokens into Entities (e.g. "Test" + "Name" -> "Test Name")
+        merge_detections = merge_boxes_bio(pixel_boxes, labels, probs) 
         
         results = []
         # Basic loop to create results (Replace with your merge logic)
-        for box, label, score in final_detections:
-            if score < 0.40: continue
-            if label == "O": continue
+        for box, label, score in merge_detections:
+            if score < 0.40 or label == "O": 
+                continue
             
-            # Convert [0-1000] to [0-100%]
-            x, y, x2, y2 = box
-            w, h = x2 - x, y2 - y
+            x1, y1, x2, y2 = box
+    
+            # 3. CONVERT TO PERCENTAGES (0-100)
+            # Formula: (Pixel / Total_Pixels) * 100
+            x = (x1 / width) * 100
+            y = (y1 / height) * 100
+            w = ((x2 - x1) / width) * 100
+            h = ((y2 - y1) / height) * 100
+
+            # Add this print debugging line
+            print(f"Label: {label} | Pixels: {x1:.0f} of {width} | Percent: {x:.2f}%")
             
             results.append({
                 "id": str(uuid.uuid4())[:8],
@@ -195,10 +200,14 @@ def main():
                 "to_name": "image",
                 "type": "rectanglelabels",
                 "value": {
-                    "x": x/10, "y": y/10, "width": w/10, "height": h/10, # Simple /10 conversion
+                    "x": x,
+                    "y": y, 
+                    "width": w, 
+                    "height": h, 
+                    "rotation": 0,
                     "rectanglelabels": [label]
                 },
-                "score": score
+                "score": float(score) # Ensure JSON serializable
             })
 
         # Add to JSON

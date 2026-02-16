@@ -1,7 +1,7 @@
 import json
 import os
 import urllib.parse
-from config import TASKS_JSON_PATH
+from src.config import TASKS_JSON_PATH
 
 PREDICTIONS_JSON = "data/batch_upload/predictions.json"
 OUTPUT_JSON = "data/batch_upload/ready_to_import.json"

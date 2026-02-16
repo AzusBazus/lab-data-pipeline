@@ -44,3 +44,5 @@ models/*
 
 # Label Studio
 /my_label_studio_project/
+
+lab_data_pipeline.egg-info/*

@@ -7,28 +7,7 @@ from transformers import LayoutLMv3Processor
 from datasets import Dataset, Features, Sequence, ClassLabel, Value, Array2D, Array3D, DownloadMode
 import numpy as np
 from collections import defaultdict 
-
-JSON_MIN_PATH = "src/data/export.json"
-
-IMAGE_DIR = "src/data/images"
-
-DATASET_PATH = "src/data/dataset_processed"
-
-BASE_MODEL_ID = "./src/models/base_model" 
-
-LABELS = [
-    "O", 
-    "B-Section_Header", "I-Section_Header",
-    "B-Test_Context_Name", "I-Test_Context_Name",
-    "B-Test_Name", "I-Test_Name",
-    "B-Test_Value", "I-Test_Value",
-    "B-Test_Unit", "I-Test_Unit",
-    "B-Test_Norm", "I-Test_Norm",
-    "B-Patient_Name", "I-Patient_Name",
-    "B-Patient_DOB", "I-Patient_DOB",
-    "B-Patient_Weight", "I-Patient_Weight",
-    "B-Patient_Height", "I-Patient_Height",
-]
+from config import LABELS, BASE_MODEL_PATH, JSON_MIN_PATH, IMAGES_PATH, DATASET_PATH
 
 id2label = {k: v for k, v in enumerate(LABELS)}
 label2id = {v: k for k, v in enumerate(LABELS)}
@@ -64,14 +43,14 @@ def generate_examples(json_path=JSON_MIN_PATH):
     with open(json_path, "r") as f:
         data = json.load(f)
 
-    processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_ID)
+    processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_PATH)
     
     total_files = 0
     total_valid_samples = 0
 
     for item_idx, item in enumerate(data):
         filename = Path(item['image']).name
-        image_path = smart_find_file(item['image'], IMAGE_DIR)
+        image_path = smart_find_file(item['image'], IMAGES_PATH)
         
         if not image_path or not image_path.exists():
             print(f"⚠️  [File {item_idx}] Image not found: {filename}")

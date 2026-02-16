@@ -1,15 +1,3 @@
-JSON_MIN_PATH = "src/data/export.json"
-
-IMAGE_DIR = "src/data/images"
-
-DATASET_PATH = "src/data/dataset_processed"
-
-BASE_MODEL_ID = "./src/models/base_model" 
-
-V1_MODEL_ID = "./src/models/custom_v1/final"
-
-MODELS_DIR = "./src/models"
-
 LABELS = [
     "O", 
     "B-Section_Header", "I-Section_Header",
@@ -24,12 +12,20 @@ LABELS = [
     "B-Patient_Height", "I-Patient_Height",
 ]
 
-LABEL_COLORS = {
-    "Table_Context": "darkblue",
-    "Section_Header": "red",
-    "Test_Name": "green",
-    "Test_Value": "orange",
-    "Test_Unit": "cyan",
-    "Patient_Name": "purple",
-    "Patient_ID": "grey"
-}
+BASE_MODEL_PATH = "./models/base_model" 
+
+DATASET_PATH = "./data/dataset"
+
+MODEL_PATH = "./models/custom_v2"
+
+JSON_MIN_PATH = "./data/export.json"
+
+IMAGES_PATH = "./data/images"
+
+LABEL_STUDIO_URL = "http://localhost:8080" 
+
+PROJECT_ID = 1
+
+SESSION_ID = ".eJxVT8mOhCAQ_RfOSopFkD7Ofb7BFFAo0wY6osksmX8fnfSlLy-pt6Z-2JEjuzFQGIagqHcORa8VDP0YEXptQCd7QlCadaxuM5b8jXuuZXrc2U10bMW2T2udczlPa4UYrNSWSyk0qLFjEx77Mh2Ntul_SrAXzmO4U7mE-IFlrjzUsm_Z88vCn2rj7zXS-vb0vhQs2JYzrSyS09E4HyMoI0abggaHEVIakyKM5KSF5E3UQpGLYNSZSMYLGcjLq7RRa9dn9PnI2xe7ycFJAA6_f0h9XAo:1vrgw6:MUAfTybahFEekljf0ibgan0LL5GBIUjMOEf6OjP98yI" 
+
+TASKS_JSON_PATH = "./data/project_tasks.json"

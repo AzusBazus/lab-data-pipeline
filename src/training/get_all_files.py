@@ -2,11 +2,7 @@ import requests
 import json
 
 # --- CONFIG ---
-LABEL_STUDIO_URL = "http://localhost:8080" # Ensure this matches your browser URL exactly
-PROJECT_ID = 1
-
-# 🔴 PASTE YOUR COOKIE VALUE HERE (No "Bearer", no "Token", just the string)
-SESSION_ID = ".eJxVT8mOhCAQ_RfOSopFkD7Ofb7BFFAo0wY6osksmX8fnfSlLy-pt6Z-2JEjuzFQGIagqHcORa8VDP0YEXptQCd7QlCadaxuM5b8jXuuZXrc2U10bMW2T2udczlPa4UYrNSWSyk0qLFjEx77Mh2Ntul_SrAXzmO4U7mE-IFlrjzUsm_Z88vCn2rj7zXS-vb0vhQs2JYzrSyS09E4HyMoI0abggaHEVIakyKM5KSF5E3UQpGLYNSZSMYLGcjLq7RRa9dn9PnI2xe7ycFJAA6_f0h9XAo:1vrgw6:MUAfTybahFEekljf0ibgan0LL5GBIUjMOEf6OjP98yI" 
+from config import LABEL_STUDIO_URL, PROJECT_ID, SESSION_ID
 
 def main():
     print(f"⏳ Connecting to Project {PROJECT_ID} via Session Cookie...")
@@ -37,7 +33,7 @@ def main():
         print(f"✅ Success! Downloaded {len(data)} tasks.")
         
         # Save file
-        with open("src/data/project_tasks.json", "w") as f:
+        with open("data/project_tasks.json", "w") as f:
             json.dump(data, f, indent=2)
             
     except Exception as e:

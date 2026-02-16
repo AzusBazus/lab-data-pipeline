@@ -1,19 +1,18 @@
 import json
 import os
 import urllib.parse
+from config import TASKS_JSON_PATH
 
-# --- CONFIGURATION ---
-TASKS_JSON = "src/data/project_tasks.json" 
-PREDICTIONS_JSON = "src/data/batch_upload/predictions.json"
-OUTPUT_JSON = "src/data/batch_upload/ready_to_import.json"
+PREDICTIONS_JSON = "data/batch_upload/predictions.json"
+OUTPUT_JSON = "data/batch_upload/ready_to_import.json"
 
 def main():
-    if not os.path.exists(TASKS_JSON):
-        print(f"❌ Error: Could not find {TASKS_JSON}")
+    if not os.path.exists(TASKS_JSON_PATH):
+        print(f"❌ Error: Could not find {TASKS_JSON_PATH}")
         return
 
-    print(f"⏳ Loading huge export: {TASKS_JSON}...")
-    with open(TASKS_JSON, 'r') as f:
+    print(f"⏳ Loading huge export: {TASKS_JSON_PATH}...")
+    with open(TASKS_JSON_PATH, 'r') as f:
         all_tasks = json.load(f)
     
     print(f"⏳ Loading local predictions: {PREDICTIONS_JSON}...")

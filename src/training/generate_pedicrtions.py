@@ -7,14 +7,10 @@ import uuid
 from pathlib import Path
 from PIL import Image
 from transformers import LayoutLMv3ForTokenClassification, LayoutLMv3Processor
+from config import  JSON_MIN_PATH, IMAGES_PATH, MODEL_PATH, BASE_MODEL_PATH
 
-# --- CONFIGURATION ---
-EXPORT_JSON_PATH = "src/data/export.json"  # The latest export from Label Studio
-ALL_IMAGES_DIR = "src/data/images"              # Where all 270 images live
-MODEL_PATH = "src/models/custom_v2/final"                 # Your best model
-BASE_MODEL_PATH = "src/models/base_model"
-BATCH_SIZE = 20                                     # How many to label next?
-OUTPUT_DIR = "src/data/batch_upload"                         # Temporary folder for drag-and-drop
+BATCH_SIZE = 20
+OUTPUT_DIR = "./data/batch_upload"
 
 def get_completed_filenames(json_path):
     """Reads Label Studio export to find what we have already done."""
@@ -111,8 +107,8 @@ def main():
     os.makedirs(OUTPUT_DIR)
 
     # 2. Identify "ToDo" list
-    completed_files = get_completed_filenames(EXPORT_JSON_PATH)
-    all_files = [f for f in os.listdir(ALL_IMAGES_DIR) if f.endswith(('.png', '.jpg', '.jpeg'))]
+    completed_files = get_completed_filenames(JSON_MIN_PATH)
+    all_files = [f for f in os.listdir(IMAGES_PATH) if f.endswith(('.png', '.jpg', '.jpeg'))]
     
     # Logic: Filter out files that "end with" any string in the completed list
     # (Handles the random UUID prefix Label Studio adds: "abcde-my_image.png")
@@ -147,7 +143,7 @@ def main():
     ls_tasks = []
 
     for filename in batch_files:
-        src_path = os.path.join(ALL_IMAGES_DIR, filename)
+        src_path = os.path.join(IMAGES_PATH, filename)
         dst_path = os.path.join(OUTPUT_DIR, filename)
         
         # Copy image to upload folder

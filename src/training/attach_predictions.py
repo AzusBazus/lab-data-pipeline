@@ -1,5 +1,6 @@
 import json
 import os
+import urllib.parse
 
 # --- CONFIGURATION ---
 TASKS_JSON = "src/data/project_tasks.json" 
@@ -34,28 +35,34 @@ def main():
     
     # 2. Filter the Huge List
     for task in all_tasks:
-        # Label Studio path: "/data/upload/1/hash-page1.png"
-        internal_path = task['data']['image']
+        # Label Studio path: "/data/upload/1/8d9bc659-%D0%9C%D0%B0...png"
+        raw_path = task['data']['image']
+        
+        # 1. DECODE the URL (Turn %D0%9C into Cyrillic characters)
+        # This converts "/data/.../%D0%9C.png" -> "/data/.../Махмудова.png"
+        decoded_path = urllib.parse.unquote(raw_path)
         
         # Check if this task matches any of our new files
         match_found = False
         for fname, prediction in pred_map.items():
-            if internal_path.endswith(fname):
-                # MATCH! This is one of the 20 new files.
+            # Now we compare "Махмудова.png" with "Махмудова.png"
+            # We check both raw and decoded just to be safe
+            if decoded_path.endswith(fname) or raw_path.endswith(fname):
                 
+                # MATCH! This is one of the 20 new files.
                 # Attach the prediction
                 task['predictions'] = prediction
                 
                 # Add to our "Update List"
                 tasks_to_update.append(task)
                 
-                # Remove from map so we don't double-match (optimization)
+                # Remove from map so we don't double-match
                 del pred_map[fname]
                 match_found = True
                 break
         
         if len(pred_map) == 0:
-            break # We found all 20! Stop searching.
+            break
 
     # 3. Save ONLY the updated tasks
     if not tasks_to_update:

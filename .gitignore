@@ -38,13 +38,9 @@ Thumbs.db
 /datasets/
 /wandb/
 
-src/data/*
+data/*
 
-src/models/*
-
-src/test_table.png
-src/export.json
-src/model_output/
+models/*
 
 # Label Studio
 /my_label_studio_project/

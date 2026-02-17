@@ -7,7 +7,7 @@ from transformers import LayoutLMv3Processor
 from datasets import Dataset, Features, Sequence, ClassLabel, Value, Array2D, Array3D, DownloadMode
 import numpy as np
 from collections import defaultdict 
-from config import LABELS, BASE_MODEL_PATH, JSON_MIN_PATH, IMAGES_PATH, DATASET_PATH
+from src.config import LABELS, BASE_MODEL_PATH, JSON_MIN_PATH, IMAGES_PATH, DATASET_PATH
 
 id2label = {k: v for k, v in enumerate(LABELS)}
 label2id = {v: k for k, v in enumerate(LABELS)}

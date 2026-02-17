@@ -16,7 +16,9 @@ BASE_MODEL_PATH = "./models/base_model"
 
 DATASET_PATH = "./data/dataset"
 
-MODEL_PATH = "./models/custom_v2"
+MODEL_PATH = "./models/custom_v4"
+
+MODEL_VERSION = "custom_v4"
 
 JSON_MIN_PATH = "./data/export.json"
 

@@ -1,7 +1,7 @@
 from transformers import LayoutLMv3ForTokenClassification, TrainingArguments, Trainer
 from datasets import load_from_disk
 import torch
-from config import LABELS, BASE_MODEL_PATH, DATASET_PATH, MODEL_PATH
+from src.config import LABELS, BASE_MODEL_PATH, DATASET_PATH, MODEL_PATH
 
 id2label = {k: v for k, v in enumerate(LABELS)}
 label2id = {v: k for k, v in enumerate(LABELS)}

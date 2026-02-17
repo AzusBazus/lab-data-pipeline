@@ -5,15 +5,17 @@ import random
 import torch
 import uuid
 from pathlib import Path
+import urllib.parse
+import unicodedata
 from PIL import Image
 from transformers import LayoutLMv3ForTokenClassification, LayoutLMv3Processor
-from src.config import  JSON_MIN_PATH, IMAGES_PATH, MODEL_PATH, BASE_MODEL_PATH
+from src.config import  JSON_MIN_PATH, IMAGES_PATH, MODEL_PATH, BASE_MODEL_PATH, MODEL_VERSION
 
 BATCH_SIZE = 20
 OUTPUT_DIR = "./data/batch_upload"
 
 def get_completed_filenames(json_path):
-    """Reads Label Studio export to find what we have already done."""
+    """Reads Label Studio export and correctly decodes filenames."""
     if not os.path.exists(json_path):
         print(f"⚠️ Warning: {json_path} not found. Assuming 0 images done.")
         return set()
@@ -23,11 +25,17 @@ def get_completed_filenames(json_path):
     
     done_files = set()
     for item in data:
-        # Label Studio stores as "/data/upload/filename.png" -> extract "filename.png"
-        # Also handles URL encoded names if needed
-        filename = Path(item['image']).name
-        # Simple decode if needed, or rely on endswith match later
-        done_files.add(filename)
+        raw_path = item.get('image') or item.get('data', {}).get('image')
+        
+        if not raw_path: continue
+        
+        decoded_path = urllib.parse.unquote(raw_path)
+        
+        full_name = Path(decoded_path).name
+        
+        norm_name = unicodedata.normalize('NFC', full_name)
+
+        done_files.add(norm_name)
     
     return done_files
 
@@ -46,8 +54,7 @@ def pixel_to_percent(box, width, height):
 
 def merge_boxes_bio(boxes, labels, scores):
     """
-    Merges tokens based on BIO tags (B- / I-).
-    This prevents 'Row 1' and 'Row 2' from merging even if they are close.
+    Merges tokens based on BIO tags AND geometric proximity.
     """
     merged_results = []
     if not boxes: return merged_results
@@ -56,44 +63,52 @@ def merge_boxes_bio(boxes, labels, scores):
     curr_label = None
     curr_scores = []
 
+    # Threshold: If next token is >15 pixels below current box, break it.
+    Y_BREAK_THRESHOLD = 15.0 
+
     for box, label, score in zip(boxes, labels, scores):
         if label == "O":
-            # If we hit background, close the current box
             if curr_box:
                 avg_score = sum(curr_scores) / len(curr_scores)
                 merged_results.append((curr_box, curr_label, avg_score))
                 curr_box = None
             continue
 
-        # Split "B-Test_Name" into "B" and "Test_Name"
         prefix = label[0] # "B" or "I"
-        core_label = label[2:] # "Test_Name"
+        core_label = label[2:] if len(label) > 2 else label
 
-        # LOGIC: Start a new box if:
-        # 1. We don't have an open box
-        # 2. The label type changed (Name -> Value)
-        # 3. We hit a "B-" tag (Explicit start of new entity)
-        if curr_box is None or core_label != curr_label or prefix == "B":
+        # Calculate gap
+        is_vertical_break = False
+        if curr_box:
+            # gap = current_top - previous_bottom
+            gap = box[1] - curr_box[3] 
+            if gap > Y_BREAK_THRESHOLD:
+                is_vertical_break = True
+
+        if (curr_box is None or 
+            core_label != curr_label or 
+            prefix == "B" or 
+            is_vertical_break):
             
-            # Close previous box first
+            # Close previous
             if curr_box:
                 avg_score = sum(curr_scores) / len(curr_scores)
                 merged_results.append((curr_box, curr_label, avg_score))
             
-            # Start new box
+            # Start new
             curr_box = list(box)
             curr_label = core_label
             curr_scores = [score]
             
         elif prefix == "I" and core_label == curr_label:
-            # EXTEND current box (Merge)
-            curr_box[0] = min(curr_box[0], box[0]) # min x
-            curr_box[1] = min(curr_box[1], box[1]) # min y
-            curr_box[2] = max(curr_box[2], box[2]) # max x
-            curr_box[3] = max(curr_box[3], box[3]) # max y
+            # MERGE
+            curr_box[0] = min(curr_box[0], box[0])
+            curr_box[1] = min(curr_box[1], box[1])
+            curr_box[2] = max(curr_box[2], box[2])
+            curr_box[3] = max(curr_box[3], box[3])
             curr_scores.append(score)
 
-    # Append the final straggler
+    # Close final
     if curr_box:
         avg_score = sum(curr_scores) / len(curr_scores)
         merged_results.append((curr_box, curr_label, avg_score))
@@ -106,19 +121,22 @@ def main():
         shutil.rmtree(OUTPUT_DIR)
     os.makedirs(OUTPUT_DIR)
 
-    # 2. Identify "ToDo" list
     completed_files = get_completed_filenames(JSON_MIN_PATH)
     all_files = [f for f in os.listdir(IMAGES_PATH) if f.endswith(('.png', '.jpg', '.jpeg'))]
     
-    # Logic: Filter out files that "end with" any string in the completed list
-    # (Handles the random UUID prefix Label Studio adds: "abcde-my_image.png")
     todo_files = []
     for f in all_files:
+        # Normalize local filename too
+        f_norm = unicodedata.normalize('NFC', f)
+        
         is_done = False
         for done_name in completed_files:
-            if done_name.endswith(f) or f.endswith(done_name):
+            # Check if the Label Studio name ENDS with our local filename
+            # Ex: "uuid-image.png".endswith("image.png") -> True
+            if done_name.endswith(f_norm):
                 is_done = True
                 break
+        
         if not is_done:
             todo_files.append(f)
 
@@ -149,14 +167,11 @@ def main():
         # Copy image to upload folder
         shutil.copy(src_path, dst_path)
         
-        # --- RUN INFERENCE (Simplified for brevity) ---
         image = Image.open(src_path).convert("RGB")
         inputs = processor(image, return_tensors="pt", truncation=True, max_length=512)
         with torch.no_grad():
             outputs = model(**inputs)
         
-        # Placeholder logic to ensure script runs:
-        # You MUST paste the `merge_boxes` and `pixel_to_percent` functions here!
         predictions = outputs.logits.argmax(-1).squeeze().tolist()
         probs = outputs.logits.softmax(-1).max(-1).values.squeeze().tolist()
         token_boxes = inputs.bbox.squeeze().tolist()
@@ -214,7 +229,7 @@ def main():
         ls_tasks.append({
             "data": { "image": filename }, 
             "predictions": [{
-                "model_version": "custom_v2",
+                "model_version": f"{MODEL_VERSION}",
                 "result": results
             }]
         })

@@ -1,3 +1,4 @@
+import random
 import json
 import os
 from pathlib import Path
@@ -47,7 +48,6 @@ def generate_examples(json_path=JSON_MIN_PATH):
 
     processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_PATH)
     
-    total_files = 0
     total_valid_samples = 0
 
     for item_idx, item in enumerate(data):
@@ -55,122 +55,114 @@ def generate_examples(json_path=JSON_MIN_PATH):
         image_path = smart_find_file(item['image'], IMAGES_PATH)
         
         if not image_path or not image_path.exists():
-            print(f"⚠️  [File {item_idx}] Image not found: {filename}")
             continue
 
         image = Image.open(image_path).convert("RGB")
         width, height = image.size
 
-        # --- 1. LOAD & SORT USER BOXES (The Fix) ---
+        # 1. LOAD USER BOXES (Same as before)
         user_boxes = []
         user_labels = []
-        
         if 'label' in item:
-            # First, extract all raw boxes
             temp_boxes = []
             for annotation in item['label']:
                 x = annotation['x'] / 100 * width
                 y = annotation['y'] / 100 * height
                 w = annotation['width'] / 100 * width
                 h = annotation['height'] / 100 * height
-                
-                # Store Area for sorting
                 area = w * h
                 box = [x, y, x + w, y + h]
                 label_name = annotation['rectanglelabels'][0]
-                
                 temp_boxes.append({"box": box, "label": label_name, "area": area})
             
-            # SORT: Smallest Area First! 
-            # This prevents a big "Table" box from stealing the label from a small "Value" box.
             temp_boxes.sort(key=lambda x: x["area"])
-            
             for t in temp_boxes:
                 user_boxes.append(t["box"])
                 user_labels.append(t["label"])
 
-        # --- 2. RUN OCR ---
+        # --- 2. RUN OCR WITH SLIDING WINDOW (The Fix) ---
         try:
+            # We enable sliding window here
             encoding = processor(
                 image, 
                 return_offsets_mapping=True, 
                 truncation=True, 
                 max_length=512, 
                 padding="max_length", 
-                return_tensors="pt"
+                return_tensors="pt",
+                # NEW PARAMETERS:
+                return_overflowing_tokens=True, # Return the extra pieces
+                stride=128 # Overlap amount (ensures no context is lost at the cut)
             )
         except Exception as e:
             print(f"❌ [File {filename}] OCR Failed: {e}")
             continue
 
-        ocr_boxes_1000 = encoding.bbox[0]
-        token_labels = []
+        # encoding.input_ids is now shape [num_chunks, 512]
+        num_chunks = len(encoding.input_ids)
         
-        # LOGGING COUNTER
-        stats = defaultdict(int)
-
-        for i, ocr_box in enumerate(ocr_boxes_1000):
-            if ocr_box.tolist() == [0, 0, 0, 0]:
-                token_labels.append(label2id["O"])
-                continue
-
-            x1 = ocr_box[0] * width / 1000
-            y1 = ocr_box[1] * height / 1000
-            x2 = ocr_box[2] * width / 1000
-            y2 = ocr_box[3] * height / 1000
+        # Loop through EACH CHUNK (e.g., Top Half, Bottom Half)
+        for chunk_idx in range(num_chunks):
             
-            center_x = x1 + (x2 - x1) / 2
-            center_y = y1 + (y2 - y1) / 2
+            # Extract specific boxes for this chunk
+            ocr_boxes_1000 = encoding.bbox[chunk_idx]
+            token_labels = []
+            stats = defaultdict(int)
 
-            best_label = "O"
+            for i, ocr_box in enumerate(ocr_boxes_1000):
+                if ocr_box.tolist() == [0, 0, 0, 0]:
+                    token_labels.append(label2id["O"])
+                    continue
+
+                x1 = ocr_box[0] * width / 1000
+                y1 = ocr_box[1] * height / 1000
+                x2 = ocr_box[2] * width / 1000
+                y2 = ocr_box[3] * height / 1000
+                
+                center_x = x1 + (x2 - x1) / 2
+                center_y = y1 + (y2 - y1) / 2
+
+                best_label = "O"
+                for u_box, u_label in zip(user_boxes, user_labels):
+                    if is_inside((center_x, center_y), u_box):
+                        best_label = u_label
+                        break 
+
+                final_tag = "O"
+                if best_label != "O":
+                    if i > 0 and token_labels[-1] in [label2id[f"B-{best_label}"], label2id[f"I-{best_label}"]]:
+                         final_tag = f"I-{best_label}"
+                    else:
+                         final_tag = f"B-{best_label}"
+                    stats[best_label] += 1
+                    
+                token_labels.append(label2id[final_tag])
+
+            if sum(stats.values()) > 0:
+                 # Clean up print to show which part of the page this is
+                 part_str = f"(Part {chunk_idx+1}/{num_chunks})"
+                 print(f"✅ {image_path} {part_str} | Found: {dict(stats)}")
+
+            unique_labels = set(token_labels)
             
-            # Check user boxes (Now sorted small -> large)
-            for u_box, u_label in zip(user_boxes, user_labels):
-                if is_inside((center_x, center_y), u_box):
-                    best_label = u_label
-                    break 
+            has_entities = any(l != label2id["O"] for l in token_labels)
+            
+            if not has_entities:
+                if random.random() > 0.1:
+                    print(f"❌ {image_path} {part_str} | No entities found, skipping")
+                    continue
 
-            # BIO Logic
-            final_tag = "O"
-            if best_label != "O":
-                if i > 0 and token_labels[-1] in [label2id[f"B-{best_label}"], label2id[f"I-{best_label}"]]:
-                     final_tag = f"I-{best_label}"
-                else:
-                     final_tag = f"B-{best_label}"
-                
-                # Count it for the logs
-                stats[best_label] += 1
-                
-            token_labels.append(label2id[final_tag])
+            total_valid_samples += 1
 
-        # --- 3. PRINT REPORT ---
-        # Only print if we found meaningful labels to avoid spam
-        if sum(stats.values()) > 0:
-            print(f"✅ {image_path} | Found: ", end="")
-            # Format: Name: 12, Value: 5, Unit: 5
-            log_str = ", ".join([f"{k}: {v}" for k, v in stats.items()])
-            print(log_str, "\n")
-        else:
-            print(f"⚠️  {image_path} | NO LABELS MATCHED (Check Box Alignment!)")
-
-        # Padding logic...
-        if len(token_labels) < 512:
-            token_labels += [label2id["O"]] * (512 - len(token_labels))
-        else:
-            token_labels = token_labels[:512]
-
-        total_valid_samples += 1
-
-        yield {
-            "id": filename,
-            "input_ids": encoding.input_ids[0].tolist(),
-            "attention_mask": encoding.attention_mask[0].tolist(),
-            "bbox": ocr_boxes_1000,
-            "pixel_values": encoding.pixel_values[0].tolist(),
-            "labels": token_labels
-        }
-    
-    print(f"\n📊 Summary: Processed {total_valid_samples} valid images.")
+            # Yield THIS specific chunk
+            yield {
+                "id": f"{filename}_{chunk_idx}", # Unique ID for each chunk
+                "input_ids": encoding.input_ids[chunk_idx].tolist(),
+                "attention_mask": encoding.attention_mask[chunk_idx].tolist(),
+                "bbox": encoding.bbox[chunk_idx].tolist(),
+                "pixel_values": encoding.pixel_values[0].tolist(), 
+                "labels": token_labels
+            }
 
 
 # --- MAIN EXECUTION ---

@@ -22,16 +22,23 @@ def main():
     )
 
     args = TrainingArguments(
-        output_dir=MODEL_PATH,
-        max_steps=200,                # Short run for testing
-        per_device_train_batch_size=2, # Keep small for CPU/MPS
+        output_dir=f"{MODEL_PATH}/final",
+        
+        # CHANGE 1: Use Epochs, not Steps
+        max_steps=-1,               # Disable step limit
+        num_train_epochs=20,        # Train for 20 full cycles (Standard for LayoutLM)
+        
+        # CHANGE 2: Maintenance
+        per_device_train_batch_size=4, # Keep low for 249 samples
+        save_strategy="epoch",      # Save model at end of every epoch
+        eval_strategy="epoch",# Check performance every epoch
+        logging_strategy="epoch",   # Less log spam
+        load_best_model_at_end=True,# Automatically load the best epoch at the end
+        metric_for_best_model="eval_loss", # optimizing for F1 score (accuracy)
+        greater_is_better=False,  # Lower loss is better
+        save_total_limit=3,         # Only keep the top 3 checkpoints (saves disk space)
+        warmup_ratio=0.1,           # Warmup helps with new data
         learning_rate=5e-5,
-        eval_strategy="steps",
-        eval_steps=20,
-        save_steps=50,
-        logging_steps=10,
-        remove_unused_columns=False,
-        dataloader_pin_memory=False
     )
 
     trainer = Trainer(

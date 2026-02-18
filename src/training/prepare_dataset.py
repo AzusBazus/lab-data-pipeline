@@ -2,6 +2,8 @@ import json
 import os
 from pathlib import Path
 from urllib.parse import unquote
+import time
+import shutil
 from PIL import Image
 from transformers import LayoutLMv3Processor
 from datasets import Dataset, Features, Sequence, ClassLabel, Value, Array2D, Array3D, DownloadMode
@@ -174,8 +176,10 @@ def generate_examples(json_path=JSON_MIN_PATH):
 # --- MAIN EXECUTION ---
 print("🚀 Parsing Label Studio Data...")
 
-# Create Generator
-def gen(json_path=JSON_MIN_PATH):
+if os.path.exists(DATASET_PATH):
+    shutil.rmtree(DATASET_PATH)
+
+def gen(json_path=JSON_MIN_PATH, **kwargs):
     return generate_examples(json_path)
 
 # Define Schema
@@ -188,8 +192,15 @@ features = Features({
     "labels": Sequence(ClassLabel(names=LABELS))
 })
 
-# Build Dataset
-ds = Dataset.from_generator(gen, gen_kwargs={"json_path": JSON_MIN_PATH}, features=features)
+ds = Dataset.from_generator(
+    gen, 
+    gen_kwargs={
+        "json_path": JSON_MIN_PATH,
+        "anti_cache_timestamp": time.time()
+    }, 
+    features=features
+)
+
 ds.save_to_disk(DATASET_PATH)
 
 print(f"✅ Dataset processed and saved to {DATASET_PATH}")

@@ -3,44 +3,29 @@ import random
 import torch
 from PIL import Image, ImageDraw, ImageFont
 from transformers import LayoutLMv3ForTokenClassification, LayoutLMv3Processor
-
-LABEL_COLORS = {
-    "Table_Context": "darkblue",
-    "Section_Header": "red",
-    "Test_Name": "green",
-    "Test_Value": "orange",
-    "Test_Unit": "cyan",
-    "Patient_Name": "purple",
-    "Patient_ID": "grey"
-}
-
-BASE_MODEL_ID = "./src/models/base_model"
-
-V1_MODEL_ID = "./src/models/custom_v2/final"
-
-IMAGE_DIR = "src/data/images"
+from src.config import BASE_MODEL_PATH, MODEL_PATH, LABEL_COLORS, IMAGES_PATH
 
 CONFIDENCE_THRESHOLD = 0.50 # Only show boxes with >50% confidence
 
 def main():
     # 1. Load Model & Processor
-    print(f"⏳ Loading model from {V1_MODEL_ID}...")
+    print(f"⏳ Loading model from {MODEL_PATH + "/final"}...")
     try:
-        model = LayoutLMv3ForTokenClassification.from_pretrained(V1_MODEL_ID)
+        model = LayoutLMv3ForTokenClassification.from_pretrained(MODEL_PATH + "/final")
         # Use the base processor (it handles image resizing/OCR)
-        processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_ID)
+        processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_PATH)
     except Exception as e:
         print(f"❌ Error loading model: {e}")
         return
 
     # 2. Pick a Random Image
-    all_images = [f for f in os.listdir(IMAGE_DIR) if f.endswith(".png")]
+    all_images = [f for f in os.listdir(IMAGES_PATH) if f.endswith(".png")]
     if not all_images:
         print("❌ No PNG images found in archive.")
         return
     
     filename = random.choice(all_images)
-    image_path = os.path.join(IMAGE_DIR, filename)
+    image_path = os.path.join(IMAGES_PATH, filename)
     print(f"📸 Testing on: {filename}")
 
     image = Image.open(image_path).convert("RGB")

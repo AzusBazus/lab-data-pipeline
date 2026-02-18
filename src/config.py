@@ -12,13 +12,26 @@ LABELS = [
     "B-Patient_Height", "I-Patient_Height",
 ]
 
+LABEL_COLORS = {
+    "Section_Header": "darkblue",
+    "Test_Context_Name": "red",
+    "Test_Name": "green",
+    "Test_Value": "orange",
+    "Test_Unit": "cyan",
+    "Test_Norm": "yellow",
+    "Patient_Name": "purple",
+    "Patient_DOB": "grey",
+    "Patient_Weight": "grey",
+    "Patient_Height": "grey"
+}
+
 BASE_MODEL_PATH = "./models/base_model" 
 
 DATASET_PATH = "./data/dataset"
 
-MODEL_PATH = "./models/custom_v5"
+MODEL_PATH = "./models/custom_v7"
 
-MODEL_VERSION = "custom_v5"
+MODEL_VERSION = "custom_v7"
 
 JSON_MIN_PATH = "./data/export.json"
 

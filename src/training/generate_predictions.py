@@ -116,7 +116,7 @@ def merge_boxes_bio(boxes, labels, scores):
     return merged_results
 
 def main():
-    # 1. clean previous batch
+    # 1. Clean previous batch
     if os.path.exists(OUTPUT_DIR):
         shutil.rmtree(OUTPUT_DIR)
     os.makedirs(OUTPUT_DIR)
@@ -124,19 +124,15 @@ def main():
     completed_files = get_completed_filenames(JSON_MIN_PATH)
     all_files = [f for f in os.listdir(IMAGES_PATH) if f.endswith(('.png', '.jpg', '.jpeg'))]
     
+    # 2. Filter ToDo List
     todo_files = []
     for f in all_files:
-        # Normalize local filename too
         f_norm = unicodedata.normalize('NFC', f)
-        
         is_done = False
         for done_name in completed_files:
-            # Check if the Label Studio name ENDS with our local filename
-            # Ex: "uuid-image.png".endswith("image.png") -> True
             if done_name.endswith(f_norm):
                 is_done = True
                 break
-        
         if not is_done:
             todo_files.append(f)
 
@@ -147,13 +143,12 @@ def main():
         return
 
     # 3. Select Batch
-    # Select fewer if we are near the end
     current_batch_size = min(BATCH_SIZE, len(todo_files))
     batch_files = random.sample(todo_files, current_batch_size)
     
     print(f"🚀 Preparing Batch of {current_batch_size} images...")
     
-    # 4. Load Model for Pre-Labeling
+    # 4. Load Model
     model = LayoutLMv3ForTokenClassification.from_pretrained(MODEL_PATH + "/final")
     processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_PATH)
     id2label = model.config.id2label
@@ -164,65 +159,121 @@ def main():
         src_path = os.path.join(IMAGES_PATH, filename)
         dst_path = os.path.join(OUTPUT_DIR, filename)
         
-        # Copy image to upload folder
+        # Copy image
         shutil.copy(src_path, dst_path)
         
         image = Image.open(src_path).convert("RGB")
-        inputs = processor(image, return_tensors="pt", truncation=True, max_length=512)
+        width, height = image.size
+
+        inputs = processor(
+            image, 
+            return_tensors="pt", 
+            truncation=True, 
+            max_length=512, 
+            padding="max_length",
+            return_overflowing_tokens=True, # Enable chunking
+            stride=128                      # Enable overlap
+        )
+
+        pixel_values = inputs['pixel_values']
+        
+        # 1. Convert List to Tensor if needed
+        if isinstance(pixel_values, list):
+            if len(pixel_values) > 0 and isinstance(pixel_values[0], torch.Tensor):
+                pixel_values = torch.stack(pixel_values) # Stack list of tensors
+            else:
+                pixel_values = torch.tensor(pixel_values) # Convert list of floats
+        
+        # 2. Ensure Batch Dimension (1, 3, 224, 224)
+        if pixel_values.dim() == 3:
+            pixel_values = pixel_values.unsqueeze(0)
+            
+        # 3. Repeat Image to match Number of Text Chunks
+        num_chunks = inputs['input_ids'].shape[0]
+        if pixel_values.shape[0] != num_chunks:
+            # Example: Expand (1, 3, 224, 224) -> (5, 3, 224, 224)
+            pixel_values = pixel_values.repeat(num_chunks, 1, 1, 1)
+            
+        # 4. Update Inputs
+        inputs['pixel_values'] = pixel_values
+        
+        # "inputs" now contains [num_chunks, 512, ...]
+        # The model handles this as a standard "batch" automatically
         with torch.no_grad():
             outputs = model(**inputs)
         
-        predictions = outputs.logits.argmax(-1).squeeze().tolist()
-        probs = outputs.logits.softmax(-1).max(-1).values.squeeze().tolist()
-        token_boxes = inputs.bbox.squeeze().tolist()
-        width, height = image.size
+        # Extract predictions for ALL chunks
+        # Shape: [num_chunks, 512]
+        chunk_predictions = outputs.logits.argmax(-1)
+        chunk_probs = outputs.logits.softmax(-1).max(-1).values
+        chunk_boxes = inputs.bbox # 1000-scale boxes
 
-        pixel_boxes = []
-        labels = []
-        for box, pred_id in zip(token_boxes, predictions):
-            pixel_boxes.append([
-                box[0] * width / 1000,
-                box[1] * height / 1000,
-                box[2] * width / 1000,
-                box[3] * height / 1000
-            ])
-            labels.append(id2label[pred_id])
+        # --- 🧩 STITCHING LOGIC ---
+        final_pixel_boxes = []
+        final_labels = []
+        final_probs = []
+        
+        # We use a Set to prevent duplicates in the overlap regions
+        # (Tokens 384-512 appear in both chunks; we only want them once)
+        seen_boxes = set()
 
-        # 2. Merge Tokens into Entities (e.g. "Test" + "Name" -> "Test Name")
-        merge_detections = merge_boxes_bio(pixel_boxes, labels, probs) 
+        num_chunks = len(chunk_predictions)
+        
+        for i in range(num_chunks):
+            # Extract lists for this specific chunk
+            preds = chunk_predictions[i].tolist()
+            probs = chunk_probs[i].tolist()
+            boxes = chunk_boxes[i].tolist()
+
+            for k, (pred_id, prob, box) in enumerate(zip(preds, probs, boxes)):
+                # Skip Padding tokens (0,0,0,0)
+                if box == [0, 0, 0, 0]:
+                    continue
+                
+                # Deduplication Check
+                # Box coordinates are absolute (0-1000), so duplicates are identical
+                box_tuple = tuple(box)
+                if box_tuple in seen_boxes:
+                    continue
+                seen_boxes.add(box_tuple)
+                
+                # Add valid token to final list
+                final_pixel_boxes.append([
+                    box[0] * width / 1000,
+                    box[1] * height / 1000,
+                    box[2] * width / 1000,
+                    box[3] * height / 1000
+                ])
+                final_labels.append(id2label[pred_id])
+                final_probs.append(prob)
+
+        # 5. Merge (Now using the full page of tokens)
+        merge_detections = merge_boxes_bio(final_pixel_boxes, final_labels, final_probs) 
         
         results = []
-        # Basic loop to create results (Replace with your merge logic)
         for box, label, score in merge_detections:
             if score < 0.40 or label == "O": 
                 continue
             
             x1, y1, x2, y2 = box
     
-            # 3. CONVERT TO PERCENTAGES (0-100)
-            # Formula: (Pixel / Total_Pixels) * 100
+            # Convert to Percentages
             x = (x1 / width) * 100
             y = (y1 / height) * 100
             w = ((x2 - x1) / width) * 100
             h = ((y2 - y1) / height) * 100
 
-            # Add this print debugging line
-            print(f"Label: {label} | Pixels: {x1:.0f} of {width} | Percent: {x:.2f}%")
-            
             results.append({
                 "id": str(uuid.uuid4())[:8],
                 "from_name": "label",
                 "to_name": "image",
                 "type": "rectanglelabels",
                 "value": {
-                    "x": x,
-                    "y": y, 
-                    "width": w, 
-                    "height": h, 
+                    "x": x, "y": y, "width": w, "height": h, 
                     "rotation": 0,
                     "rectanglelabels": [label]
                 },
-                "score": float(score) # Ensure JSON serializable
+                "score": float(score)
             })
 
         # Add to JSON
@@ -234,13 +285,12 @@ def main():
             }]
         })
 
-    # 5. Save JSON to the batch folder
+    # Save JSON
     json_output_path = os.path.join(OUTPUT_DIR, "predictions.json")
     with open(json_output_path, "w") as f:
         json.dump(ls_tasks, f, indent=2)
 
     print(f"✅ Batch ready in '{OUTPUT_DIR}'")
-    print(f"👉 Action: Drag the contents of '{OUTPUT_DIR}' into Label Studio.")
 
 if __name__ == "__main__":
     main()

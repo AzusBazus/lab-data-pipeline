@@ -25,6 +25,11 @@ LABEL_COLORS = {
     "Patient_Height": "grey"
 }
 
+CRITICAL_LABELS = {
+    "Patient_Name",
+    "Patient_DOB",
+}
+
 BASE_MODEL_PATH = "./models/base_model" 
 
 DATASET_PATH = "./data/dataset"

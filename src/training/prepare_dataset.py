@@ -7,10 +7,10 @@ import time
 import shutil
 from PIL import Image
 from transformers import LayoutLMv3Processor
-from datasets import Dataset, Features, Sequence, ClassLabel, Value, Array2D, Array3D, DownloadMode
+from datasets import Dataset, Features, Sequence, ClassLabel, Value, Array2D, Array3D
 import numpy as np
 from collections import defaultdict 
-from src.config import LABELS, BASE_MODEL_PATH, JSON_MIN_PATH, IMAGES_PATH, DATASET_PATH
+from src.config import LABELS, BASE_MODEL_PATH, JSON_MIN_PATH, IMAGES_PATH, DATASET_PATH, CRITICAL_LABELS
 
 id2label = {k: v for k, v in enumerate(LABELS)}
 label2id = {v: k for k, v in enumerate(LABELS)}
@@ -143,13 +143,18 @@ def generate_examples(json_path=JSON_MIN_PATH):
                  part_str = f"(Part {chunk_idx+1}/{num_chunks})"
                  print(f"✅ {image_path} {part_str} | Found: {dict(stats)}")
 
-            unique_labels = set(token_labels)
+            chunk_label_names = [id2label[l] for l in token_labels]
             
-            has_entities = any(l != label2id["O"] for l in token_labels)
+            # 1. Check for CRITICAL labels (Never skip these)
+            has_critical = any(l in CRITICAL_LABELS for l in chunk_label_names)
             
-            if not has_entities:
+            # 2. Check for ANY entities (for the 10% keep rule)
+            has_any_entities = any(l != "O" for l in chunk_label_names)
+
+            if has_critical:
+                pass 
+            elif not has_any_entities:
                 if random.random() > 0.1:
-                    print(f"❌ {image_path} {part_str} | No entities found, skipping")
                     continue
 
             total_valid_samples += 1

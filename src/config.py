@@ -49,3 +49,5 @@ PROJECT_ID = 1
 SESSION_ID = ".eJxVj8uOhCAQRf-FdUugQBCXs59vIIUUyrSBjmgyj8y_j05608tb5z5SP-zIkY3MBuoJle4SIXSaZOoGrWUH1gEoQ8EFwW6sbjOW_I17rsU_7myUN7Zi2_1a51xOaa2E3mppeS81AJzc47Ev_mi0-f8pyV5uAac7lQvEDyxz5VMt-5YDvyz8SRt_r5HWt6f3pWDBtpxpZZGcjsaFGIUycrBp0sJhFCkNSRFGcmBFCiZqqchFYdSZSCZImCjAVdqotesz-nzk7YuN0DsQgovfP-4SXKQ:1vs15e:8yrv8rvcK43Uk6KkHtoM_QhRhOYxZt65-jnvasaS7pQ" 
 
 TASKS_JSON_PATH = "./data/project_tasks.json"
+
+PRIORITY_FOLDER = "./data/priority_cases"

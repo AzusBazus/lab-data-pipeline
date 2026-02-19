@@ -29,6 +29,9 @@ def main():
         per_device_train_batch_size=1,
         gradient_accumulation_steps=4,
 
+        fp16=False,         
+        dataloader_num_workers=0,
+
         save_strategy="epoch",
         eval_strategy="epoch",
         logging_strategy="epoch",
@@ -40,8 +43,6 @@ def main():
         
         warmup_ratio=0.1,
         learning_rate=5e-5,
-
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
     )
 
     trainer = Trainer(
@@ -49,6 +50,8 @@ def main():
         args=args,
         train_dataset=dataset["train"],
         eval_dataset=dataset["test"],
+
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
     )
 
     print("🚀 Starting Training...")

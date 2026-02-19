@@ -1,6 +1,7 @@
 LABELS = [
     "O", 
     "B-Section_Header", "I-Section_Header",
+    "B-Column_Header", "I-Column_Header",
     "B-Test_Context_Name", "I-Test_Context_Name",
     "B-Test_Name", "I-Test_Name",
     "B-Test_Value", "I-Test_Value",
@@ -10,24 +11,30 @@ LABELS = [
     "B-Patient_DOB", "I-Patient_DOB",
     "B-Patient_Weight", "I-Patient_Weight",
     "B-Patient_Height", "I-Patient_Height",
+    "B-Patient_Gender", "I-Patient_Gender",
 ]
 
 LABEL_COLORS = {
     "Section_Header": "darkblue",
+    "Column_Header": "darkgreen",
     "Test_Context_Name": "red",
     "Test_Name": "green",
     "Test_Value": "orange",
     "Test_Unit": "cyan",
     "Test_Norm": "yellow",
     "Patient_Name": "purple",
-    "Patient_DOB": "grey",
-    "Patient_Weight": "grey",
-    "Patient_Height": "grey"
+    "Patient_DOB": "brown",
+    "Patient_Weight": "pink",
+    "Patient_Height": "blue",
+    "Patient_Gender": "grey"
 }
 
 CRITICAL_LABELS = {
     "Patient_Name",
     "Patient_DOB",
+    "Patient_Gender",
+    "Patient_Weight",
+    "Patient_Height",
 }
 
 BASE_MODEL_PATH = "./models/base_model" 

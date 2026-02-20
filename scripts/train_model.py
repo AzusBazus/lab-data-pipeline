@@ -1,7 +1,7 @@
 from transformers import LayoutLMv3ForTokenClassification, TrainingArguments, Trainer, EarlyStoppingCallback
 from datasets import load_from_disk
 import torch
-from src.config import LABELS, BASE_MODEL_PATH, DATASET_PATH, MODEL_PATH
+from src.config import LABELS, BASE_MODEL_PATH, DATASET_PATH, CUSTOM_MODEL_PATH
 
 id2label = {k: v for k, v in enumerate(LABELS)}
 label2id = {v: k for k, v in enumerate(LABELS)}
@@ -22,7 +22,7 @@ def main():
     )
 
     args = TrainingArguments(
-        output_dir=f"{MODEL_PATH}/final",
+        output_dir=CUSTOM_MODEL_PATH,
         max_steps=-1,
         num_train_epochs=20,
         
@@ -58,7 +58,7 @@ def main():
     trainer.train()
     
     # Save final model
-    trainer.save_model(MODEL_PATH + "/final")
+    trainer.save_model(CUSTOM_MODEL_PATH)
     print("✅ Training Complete! Model saved.")
 
 if __name__ == "__main__":

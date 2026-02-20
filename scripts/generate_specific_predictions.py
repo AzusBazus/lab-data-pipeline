@@ -7,7 +7,7 @@ import unicodedata
 from pathlib import Path
 from PIL import Image
 from transformers import LayoutLMv3ForTokenClassification, LayoutLMv3Processor
-from src.config import JSON_MIN_PATH, IMAGES_PATH, MODEL_PATH, BASE_MODEL_PATH, PRIORITY_FOLDER
+from src.config import JSON_MIN_PATH, IMAGES_PATH, FINAL_MODEL_PATH, BASE_MODEL_PATH, PRIORITY_FOLDER
 from src.train.generate_predictions import merge_boxes_bio
 
 OUTPUT_DIR = "./data/batch_upload"
@@ -76,7 +76,7 @@ def main():
     print(f"🚀 Processing {len(todo_files)} Priority Images...")
 
     # 4. Load Model
-    model = LayoutLMv3ForTokenClassification.from_pretrained(MODEL_PATH + "/final")
+    model = LayoutLMv3ForTokenClassification.from_pretrained(CUSTOM_MODEL_PATH)
     processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_PATH)
     id2label = model.config.id2label
 

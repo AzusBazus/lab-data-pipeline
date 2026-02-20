@@ -41,7 +41,7 @@ BASE_MODEL_PATH = "./models/base_model"
 
 DATASET_PATH = "./data/dataset"
 
-MODEL_PATH = "./models/custom_v8"
+CUSTOM_MODEL_PATH = "./models/custom_v8"
 
 MODEL_VERSION = "custom_v8"
 

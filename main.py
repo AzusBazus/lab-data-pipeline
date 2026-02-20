@@ -25,9 +25,9 @@ def main():
             DocumentConverter.convert_to_images(doc)
             extractor.extract(doc)
             
-            processed_path = os.path.join(DATA_OUTPUT_PATH, doc.filename)
-            shutil.move(doc.original_path, processed_path)
-            print(f"✅ Successfully processed and archived: {doc.filename}")
+            # processed_path = os.path.join(DATA_OUTPUT_PATH, doc.filename)
+            # shutil.move(doc.original_path, processed_path)
+            # print(f"✅ Successfully processed and archived: {doc.filename}")
             
         except Exception as e:
             print(f"❌ Failed to process {filename}. Error: {e}")

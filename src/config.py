@@ -62,3 +62,5 @@ PRIORITY_FOLDER = "./data/priority_cases"
 DATA_INPUT_PATH = "data/input"
 
 DATA_OUTPUT_PATH = "data/output"
+
+DATA_FAILED_PATH = "data/failed"

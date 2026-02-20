@@ -58,3 +58,7 @@ SESSION_ID = ".eJxVj8uOhCAQRf-FdUugQBCXs59vIIUUyrSBjmgyj8y_j05608tb5z5SP-zIkY3MB
 TASKS_JSON_PATH = "./data/project_tasks.json"
 
 PRIORITY_FOLDER = "./data/priority_cases"
+
+DATA_INPUT_PATH = "data/input"
+
+DATA_OUTPUT_PATH = "data/output"

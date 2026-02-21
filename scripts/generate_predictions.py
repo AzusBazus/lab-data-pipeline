@@ -7,15 +7,19 @@ import uuid
 from pathlib import Path
 import urllib.parse
 import unicodedata
-from PIL import Image
-from transformers import LayoutLMv3ForTokenClassification, LayoutLMv3Processor
-from src.config import  JSON_MIN_PATH, IMAGES_PATH, MODEL_PATH, BASE_MODEL_PATH, MODEL_VERSION
 
-BATCH_SIZE = 20
+from transformers import LayoutLMv3ForTokenClassification, LayoutLMv3Processor
+
+# --- IMPORT YOUR OOP PIPELINE ---
+from src.extraction.document import MedicalDocument
+from src.extraction.converter import DocumentConverter
+from src.extraction.ocr import TextExtractor
+from src.config import CUSTOM_MODEL_PATH, BASE_MODEL_PATH, JSON_MIN_PATH, IMAGES_PATH, MODEL_VERSION
+
+BATCH_SIZE = 10
 OUTPUT_DIR = "./data/batch_upload"
 
 def get_completed_filenames(json_path):
-    """Reads Label Studio export and correctly decodes filenames."""
     if not os.path.exists(json_path):
         print(f"⚠️ Warning: {json_path} not found. Assuming 0 images done.")
         return set()
@@ -26,44 +30,21 @@ def get_completed_filenames(json_path):
     done_files = set()
     for item in data:
         raw_path = item.get('image') or item.get('data', {}).get('image')
-        
         if not raw_path: continue
-        
         decoded_path = urllib.parse.unquote(raw_path)
-        
         full_name = Path(decoded_path).name
-        
         norm_name = unicodedata.normalize('NFC', full_name)
-
         done_files.add(norm_name)
-    
     return done_files
 
-def pixel_to_percent(box, width, height):
-    """Converts pixel [x1, y1, x2, y2] to Label Studio % [x, y, w, h]"""
-    x1, y1, x2, y2 = box
-    w = x2 - x1
-    h = y2 - y1
-    return {
-        "x": (x1 / width) * 100,
-        "y": (y1 / height) * 100,
-        "width": (w / width) * 100,
-        "height": (h / height) * 100,
-        "rotation": 0
-    }
-
 def merge_boxes_bio(boxes, labels, scores):
-    """
-    Merges tokens based on BIO tags AND geometric proximity.
-    """
+    """Merges tokens based on BIO tags AND geometric proximity."""
     merged_results = []
     if not boxes: return merged_results
 
     curr_box = None
     curr_label = None
     curr_scores = []
-
-    # Threshold: If next token is >15 pixels below current box, break it.
     Y_BREAK_THRESHOLD = 15.0 
 
     for box, label, score in zip(boxes, labels, scores):
@@ -74,41 +55,31 @@ def merge_boxes_bio(boxes, labels, scores):
                 curr_box = None
             continue
 
-        prefix = label[0] # "B" or "I"
+        prefix = label[0] 
         core_label = label[2:] if len(label) > 2 else label
 
-        # Calculate gap
         is_vertical_break = False
         if curr_box:
-            # gap = current_top - previous_bottom
             gap = box[1] - curr_box[3] 
             if gap > Y_BREAK_THRESHOLD:
                 is_vertical_break = True
 
-        if (curr_box is None or 
-            core_label != curr_label or 
-            prefix == "B" or 
-            is_vertical_break):
-            
-            # Close previous
+        if (curr_box is None or core_label != curr_label or prefix == "B" or is_vertical_break):
             if curr_box:
                 avg_score = sum(curr_scores) / len(curr_scores)
                 merged_results.append((curr_box, curr_label, avg_score))
             
-            # Start new
             curr_box = list(box)
             curr_label = core_label
             curr_scores = [score]
             
         elif prefix == "I" and core_label == curr_label:
-            # MERGE
             curr_box[0] = min(curr_box[0], box[0])
             curr_box[1] = min(curr_box[1], box[1])
             curr_box[2] = max(curr_box[2], box[2])
             curr_box[3] = max(curr_box[3], box[3])
             curr_scores.append(score)
 
-    # Close final
     if curr_box:
         avg_score = sum(curr_scores) / len(curr_scores)
         merged_results.append((curr_box, curr_label, avg_score))
@@ -116,7 +87,6 @@ def merge_boxes_bio(boxes, labels, scores):
     return merged_results
 
 def main():
-    # 1. Clean previous batch
     if os.path.exists(OUTPUT_DIR):
         shutil.rmtree(OUTPUT_DIR)
     os.makedirs(OUTPUT_DIR)
@@ -124,15 +94,10 @@ def main():
     completed_files = get_completed_filenames(JSON_MIN_PATH)
     all_files = [f for f in os.listdir(IMAGES_PATH) if f.endswith(('.png', '.jpg', '.jpeg'))]
     
-    # 2. Filter ToDo List
     todo_files = []
     for f in all_files:
         f_norm = unicodedata.normalize('NFC', f)
-        is_done = False
-        for done_name in completed_files:
-            if done_name.endswith(f_norm):
-                is_done = True
-                break
+        is_done = any(done_name.endswith(f_norm) for done_name in completed_files)
         if not is_done:
             todo_files.append(f)
 
@@ -142,150 +107,151 @@ def main():
         print("🎉 All images are annotated! No new batch needed.")
         return
 
-    # 3. Select Batch
     current_batch_size = min(BATCH_SIZE, len(todo_files))
     batch_files = random.sample(todo_files, current_batch_size)
     
     print(f"🚀 Preparing Batch of {current_batch_size} images...")
     
-    # 4. Load Model
-    model = LayoutLMv3ForTokenClassification.from_pretrained(MODEL_PATH + "/final")
-    processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_PATH)
+    # --- INITIALIZE OOP PIPELINE & MODEL ---
+    print("⏳ Loading Models & Extractors...")
+    extractor = TextExtractor()
+    model = LayoutLMv3ForTokenClassification.from_pretrained(CUSTOM_MODEL_PATH)
+    processor = LayoutLMv3Processor.from_pretrained(BASE_MODEL_PATH, apply_ocr=False) # MUST BE FALSE
     id2label = model.config.id2label
+    
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    model.to(device)
+    model.eval()
 
     ls_tasks = []
 
     for filename in batch_files:
         src_path = os.path.join(IMAGES_PATH, filename)
         dst_path = os.path.join(OUTPUT_DIR, filename)
-        
-        # Copy image
         shutil.copy(src_path, dst_path)
         
-        image = Image.open(src_path).convert("RGB")
-        width, height = image.size
+        print(f"Processing: {filename}")
 
-        inputs = processor(
+        # --- 1. OOP EXTRACTION ---
+        doc = MedicalDocument(src_path)
+        DocumentConverter.convert_to_images(doc)
+        extractor.extract(doc)
+        
+        if not doc.extracted_data or not doc.extracted_data[0]:
+            print(f"  ⚠️ No text found by OCR.")
+            continue
+            
+        image = doc.pages[0]
+        width, height = image.size
+        tokens = doc.extracted_data[0]
+        words = [t['text'] for t in tokens]
+        boxes = [t['bbox'] for t in tokens]
+
+        # --- 2. PREDICTION (With Sliding Window) ---
+        encoding = processor(
             image, 
+            words, 
+            boxes=boxes, 
             return_tensors="pt", 
             truncation=True, 
-            max_length=512, 
             padding="max_length",
-            return_overflowing_tokens=True, # Enable chunking
-            stride=128                      # Enable overlap
+            max_length=512,
+            return_overflowing_tokens=True,
+            stride=128
         )
 
-        pixel_values = inputs['pixel_values']
-        
-        # 1. Convert List to Tensor if needed
+        num_chunks = encoding['input_ids'].shape[0]
+        chunk_word_ids = [encoding.word_ids(batch_index=i) for i in range(num_chunks)]
+
+        pixel_values = encoding['pixel_values']
         if isinstance(pixel_values, list):
             if len(pixel_values) > 0 and isinstance(pixel_values[0], torch.Tensor):
-                pixel_values = torch.stack(pixel_values) # Stack list of tensors
+                pixel_values = torch.stack(pixel_values)
             else:
-                pixel_values = torch.tensor(pixel_values) # Convert list of floats
-        
-        # 2. Ensure Batch Dimension (1, 3, 224, 224)
-        if pixel_values.dim() == 3:
-            pixel_values = pixel_values.unsqueeze(0)
-            
-        # 3. Repeat Image to match Number of Text Chunks
-        num_chunks = inputs['input_ids'].shape[0]
-        if pixel_values.shape[0] != num_chunks:
-            # Example: Expand (1, 3, 224, 224) -> (5, 3, 224, 224)
+                pixel_values = torch.tensor(pixel_values)
+        if pixel_values.dim() == 3: pixel_values = pixel_values.unsqueeze(0)
+        if pixel_values.shape[0] == 1 and num_chunks > 1:
             pixel_values = pixel_values.repeat(num_chunks, 1, 1, 1)
-            
-        # 4. Update Inputs
-        inputs['pixel_values'] = pixel_values
-        
-        # "inputs" now contains [num_chunks, 512, ...]
-        # The model handles this as a standard "batch" automatically
-        with torch.no_grad():
-            outputs = model(**inputs)
-        
-        # Extract predictions for ALL chunks
-        # Shape: [num_chunks, 512]
-        chunk_predictions = outputs.logits.argmax(-1)
-        chunk_probs = outputs.logits.softmax(-1).max(-1).values
-        chunk_boxes = inputs.bbox # 1000-scale boxes
 
-        # --- 🧩 STITCHING LOGIC ---
+        encoding['pixel_values'] = pixel_values
+        encoding.pop("overflow_to_sample_mapping", None)
+
+        encoding_on_device = {k: v.to(device) for k, v in encoding.items()}
+
+        with torch.no_grad():
+            outputs = model(**encoding_on_device)
+
+        chunk_preds = outputs.logits.argmax(-1)
+        chunk_probs = torch.softmax(outputs.logits, dim=-1).max(-1).values
+
+        # --- 3. MERGE OVERLAPPING CHUNKS (Max Confidence) ---
+        best_predictions = {} 
+        for chunk_idx in range(num_chunks):
+            word_ids = chunk_word_ids[chunk_idx]
+            for seq_idx, word_idx in enumerate(word_ids):
+                if word_idx is None: continue 
+
+                label_id = chunk_preds[chunk_idx][seq_idx].item()
+                label_name = id2label[label_id]
+                confidence = chunk_probs[chunk_idx][seq_idx].item()
+
+                if word_idx in best_predictions:
+                    if confidence > best_predictions[word_idx][1]:
+                        best_predictions[word_idx] = (label_name, confidence)
+                else:
+                    best_predictions[word_idx] = (label_name, confidence)
+
+        # --- 4. PREPARE RESULTS FOR LABEL STUDIO ---
         final_pixel_boxes = []
         final_labels = []
         final_probs = []
-        
-        # We use a Set to prevent duplicates in the overlap regions
-        # (Tokens 384-512 appear in both chunks; we only want them once)
-        seen_boxes = set()
 
-        num_chunks = len(chunk_predictions)
-        
-        for i in range(num_chunks):
-            # Extract lists for this specific chunk
-            preds = chunk_predictions[i].tolist()
-            probs = chunk_probs[i].tolist()
-            boxes = chunk_boxes[i].tolist()
+        # We iterate through the original tokens we got from EasyOCR
+        for word_idx, token in enumerate(tokens):
+            if word_idx not in best_predictions: continue
+            
+            label, conf = best_predictions[word_idx]
+            
+            # Convert 0-1000 scale back to actual pixel scale
+            b = token['bbox']
+            final_pixel_boxes.append([
+                b[0] * width / 1000,
+                b[1] * height / 1000,
+                b[2] * width / 1000,
+                b[3] * height / 1000
+            ])
+            final_labels.append(label)
+            final_probs.append(conf)
 
-            for k, (pred_id, prob, box) in enumerate(zip(preds, probs, boxes)):
-                # Skip Padding tokens (0,0,0,0)
-                if box == [0, 0, 0, 0]:
-                    continue
-                
-                # Deduplication Check
-                # Box coordinates are absolute (0-1000), so duplicates are identical
-                box_tuple = tuple(box)
-                if box_tuple in seen_boxes:
-                    continue
-                seen_boxes.add(box_tuple)
-                
-                # Add valid token to final list
-                final_pixel_boxes.append([
-                    box[0] * width / 1000,
-                    box[1] * height / 1000,
-                    box[2] * width / 1000,
-                    box[3] * height / 1000
-                ])
-                final_labels.append(id2label[pred_id])
-                final_probs.append(prob)
-
-        # 5. Merge (Now using the full page of tokens)
+        # Merge BIO tags into solid boxes
         merge_detections = merge_boxes_bio(final_pixel_boxes, final_labels, final_probs) 
         
         results = []
         for box, label, score in merge_detections:
-            if score < 0.40 or label == "O": 
-                continue
+            if score < 0.40 or label == "O": continue
             
             x1, y1, x2, y2 = box
-    
-            # Convert to Percentages
-            x = (x1 / width) * 100
-            y = (y1 / height) * 100
-            w = ((x2 - x1) / width) * 100
-            h = ((y2 - y1) / height) * 100
-
             results.append({
                 "id": str(uuid.uuid4())[:8],
                 "from_name": "label",
                 "to_name": "image",
                 "type": "rectanglelabels",
                 "value": {
-                    "x": x, "y": y, "width": w, "height": h, 
+                    "x": (x1 / width) * 100, 
+                    "y": (y1 / height) * 100, 
+                    "width": ((x2 - x1) / width) * 100, 
+                    "height": ((y2 - y1) / height) * 100, 
                     "rotation": 0,
                     "rectanglelabels": [label]
                 },
                 "score": float(score)
             })
 
-        # Add to JSON
         ls_tasks.append({
             "data": { "image": filename }, 
-            "predictions": [{
-                "model_version": f"{MODEL_VERSION}",
-                "result": results
-            }]
+            "predictions": [{"model_version": MODEL_VERSION, "result": results}]
         })
 
-    # Save JSON
     json_output_path = os.path.join(OUTPUT_DIR, "predictions.json")
     with open(json_output_path, "w") as f:
         json.dump(ls_tasks, f, indent=2)
